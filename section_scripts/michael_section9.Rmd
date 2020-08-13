@@ -1,0 +1,329 @@
+---
+title: "Section 9 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+**Be sure to install ggdag before running this code.**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(gapminder)
+library(broom)
+
+library(ggdag)
+
+```
+
+
+
+
+
+# Bad Controls 
+
+There are some kinds of variables that we do not want to control for. These are variables that are affected by our independent variable. For example, if we want to learn the effect of health spending on infant mortality, we might want to control for GDP per capita, which could affect both health spending and infant mortality. However, we would not want to control for the number of health workers, which is likely largely determined by our independent variable, health spending. 
+
+The code chunks below will create graphs illustrating the kinds of casual relationships we do and do not want to control for. An arrow pointing from one variable to another means that the first variable causes the variable the arrow is pointing to. Do not worry about the code that creates these graphs, I just want to show these graphs to illustrate a point about what variables should and should not be controlled for.
+
+
+The below graph shows a variable that *causes* both our treatment (or primary independent variable) as well as the dependent variable. This variable is a confounder and we *need* to control for it or else our estimate of the effect of our treatment will suffer from omitted variable bias. If this variable only caused one of our variables and not the other, it would not be a confounder and we would not be required to control for it.
+
+
+```{r good_controls_dag, echo = FALSE, include = TRUE}
+theme_set(theme_dag())
+
+
+coords <- list(
+    x = c(Outcome = 0.5,  Treatment = 0.6, Confounders = 0.4),
+    y = c(Outcome = 0,  Treatment = 0.2, Confounders = 0.2)
+    )
+
+acme_dag <-dagify(Outcome ~ Confounders + Treatment,
+                  Treatment ~ Confounders,
+                  Outcome ~ Confounders,
+                  outcome = "Outcome",
+                  labels = c("Outcome" = "Dependent Variable",
+                  "Treatment" = "Treatment",
+                  "Confounders" = "Confounder"),
+                  coords = coords)
+
+ggdag(acme_dag, text = FALSE, use_labels = "label")
+# acme_dag
+
+
+```
+
+
+The below graph shows a variable that causes our dependent variable and *is caused by* our treatment (or primary independent variable). This variable is a post-treatment variable that we **must not** control for or else our estimate of the effect of the treatment effect will be biased. This kind of bias is known as post-treatment bias. A good shortcut is that anything that happens in the causal chain after the treatment other than the dependent variable should *not* be in your model.
+
+```{r bad_controls_dag, echo = FALSE, include = TRUE}
+
+
+coords <- list(
+    x = c(Outcome = 0.5,  Treatment = 0.6, BadControl = 0.4),
+    y = c(Outcome = 0,  Treatment = 0.2, BadControl = 0.2)
+    )
+
+acme_dag <-dagify(Outcome ~ BadControl + Treatment,
+                  BadControl ~ Treatment,
+                  Outcome ~ BadControl,
+                  outcome = "Outcome",
+                  labels = c("Outcome" = "Dependent Variable",
+                  "Treatment" = "Treatment",
+                  "BadControl" = "Bad Control"),
+                  coords = coords)
+
+ggdag(acme_dag, text = FALSE, use_labels = "label")
+# acme_dag
+
+#reset theme
+theme_set(theme_bw())
+
+```
+
+# Practice 1
+
+I am researching the effect of campaign donations on whether candidates win general elections in the US Senate. I hypothesize that as campaign donations increase, a Senator is more likely to win an election. I think that endorsements by party leaders probably make candidates more likely to win elections  and make it easier for candidates to raise money. I think that candidates from the majority political party of a state are more likely to win re-election but this has nothing to do with how much money they raise, because fund raising happens at a national level. I think that donations cause candidates to be more likely to take pro-oil policy stances and that these energy policy stances affect their chance of winning elections.
+
+1. Which of the following variables *must* I control for to avoid omitted variable bias: whether the candidate is a member of a state's majority party, whether a candidate is endorsed by party leaders, whether a candidate takes pro-oil policy stances?
+
+2. Which of the following variables must I *not* control for to avoid post-treatment bias: whether the candidate is a member of a state's majority party, whether a candidate is endorsed by party leaders, whether a candidate takes pro-oil policy stances?
+
+# Dummy Variable Review
+
+A dummy variable must be either a 1 or a 0. If you have multiple dummy variables representing different categories, for example, states in the United States, you must leave one of these variables out of your regression. The interpretation of the coefficient on each dummy variable is in comparison to that category. For example, if you leave out the dummy for Wisconsin, then the coefficient on every other state dummy variable tells you the effect of changing from Wisconsin to that state.
+
+
+Lets create a dummy variable for the US in the gapminder data set.
+
+```{r}
+gapminder <- mutate(gapminder,
+                    us = case_when(
+                      country == "United States" ~ 1,
+                      TRUE ~ 0
+                    ))
+
+
+```
+
+
+Lets make another one for countries in Europe.
+```{r}
+gapminder <- mutate(gapminder,
+                    europe = case_when(
+                      continent == "Europe" ~ 1,
+                      TRUE ~ 0
+                    ))
+
+```
+
+
+Lets also make a log GDP per capita variable.
+
+```{r}
+
+
+gapminder <- mutate(gapminder,
+  log_gdppercap = log(gdpPercap)
+)
+
+```
+
+
+You can include dummy variables in a model like any other variable.
+
+```{r}
+model1.ols <-lm(lifeExp ~ log_gdppercap + us, data = gapminder)
+tidy(model1.ols)
+```
+
+
+
+# Interactions
+
+What if the effect of one variable depends on the value of another variable? In that case, adding them with $Y = \alpha +\beta_{1}x_{1} +\beta_{2}x_{2}$ will not capture this relationship.
+
+
+Instead you have to multiply them like this:
+$Y = \alpha + \beta_{1}x_{1} + \beta_{2}x_{2} + \beta_{3}(x_{1} \times x_{2})$
+
+
+This is called an interaction.
+
+Maybe we think that GDP per capita has a different effect in the US than in other countries either because we hypothesize that the US uses its money on health-care more or less efficiently than other countries. Lets try interacting US and GDP in our model of life expectancy to model this.
+
+```{r}
+model2.ols <- lm(lifeExp ~ log_gdppercap * us, data = gapminder)
+tidy(model2.ols)
+
+```
+
+
+
+Notice that the terms for each variable alone are automatically included in the model. These are called the constituent terms and they are almost always necessary to include when doing interactions.
+
+
+How do you interpret these results? The coefficient on log_gdppercap gives the effect of a 1 unit increase in log_gdppercap on the dependent variable *for countries other than the US* (meaning when the us variable is equal to 0). The log_gdppercap:us terms gives the effect of a 1 unit increase in log_gdppercap on the dependent variable *for the US* (meaning when the us variable is equal to 1). The US variable gives the effect of being the US compared to the average of other countries when log_gdppercap is 0. Since log_gdppercap is never 0, this term is not very meaningful.
+
+
+Because the interaction term is not significant, we cannot reject the null hypothesis that the effect of log_gdppercap is the same in the US as it is in other countries.
+
+
+Lets try a similar analysis with our Europe variable.
+
+```{r}
+model3.ols <- lm(lifeExp ~ log_gdppercap * europe, data = gapminder)
+tidy(model3.ols)
+
+
+```
+
+In this case, we can reject the null hypothesis that the interaction term does not add to the model's explanation of life expectancy. This suggests that the effect of increasing log_gdppercap is different in Europe than in other countries. 
+
+# Practice 2
+
+1. Create a dummy variable that takes a value of 1 when the country is Kuwait and 0 otherwise.
+
+2. Create a linear model where lifeExp is the dependent variable and log_gdppercap, kuwait, and kuwait$\times$log_gdppercap are the independent variables.
+
+3. Interpret the model. 
+
+
+
+
+
+
+# Predictions with Interactions
+
+It is not easy to directly interpret the coefficients for regressions with interactions. This makes it especially important to plot these variables' predicted effects. Here is how to do this.
+
+
+Unlike continuous variables, when predicting with dummy variables, it usually does not make sense to hold them at their mean. Instead, we assign them to be 0 or 1 depending on whether we want to predict the effect when the country is or is not the US.
+
+
+```{r}
+prediction_us <- mutate(gapminder,
+                       us = 1
+                       )
+
+```
+
+
+Now that we have fixed the dummy variable at a constant value, we can make the augmented data frame and calculate the confidence interval.
+```{r}
+augment_us <- augment(model2.ols, newdata = prediction_us)
+
+
+
+##calc confidence interval
+
+augment_us <- mutate(augment_us,
+  upperbound = .fitted + (1.96 * .se.fit),
+  lowerbound = .fitted - (1.96 * .se.fit)
+)
+```
+
+Lets also do this for countries that are not the US.
+
+```{r}
+prediction_world <- mutate(gapminder,
+                           us = 0) 
+augment_world <- augment(model2.ols, newdata = prediction_world)
+
+augment_world = mutate(augment_world,
+                       upperbound = .fitted + (1.96 * .se.fit),
+                       lowerbound = .fitted - (1.96 * .se.fit))
+
+```
+
+
+Now we can graph the effect of GDP for countries that are and are not the US.
+
+```{r}
+ggplot(data = augment_world, aes(x = log_gdppercap, y = .fitted)) +
+  geom_ribbon(aes(ymin = lowerbound, ymax = upperbound),
+              fill = "blue", alpha = 0.3) +
+  geom_line(color = "blue") +
+#now do it for the US
+  geom_ribbon(data = augment_us, aes(ymin = lowerbound, ymax = upperbound),
+              fill = "red", alpha = 0.3) +
+  geom_line(data = augment_us, aes(y = .fitted), color = "red") +
+  labs(x = "Log GDP Per Capita", y = "Life Expectancy (in Years)", title = "Global Health and Wealth", caption = "The US is shown in red, and the rest of the world is shown in blue.")
+
+```
+
+
+
+Lets graph the predicted effect for countries that are and are not in Europe. First lets make the prediction for the countries that are in Europe.
+
+```{r}
+prediction_eu <- mutate(gapminder,
+                        europe = 1)
+
+##make augmented dataframe
+augment_eu <-augment(model3.ols, newdata =prediction_eu)
+
+##calc confidence interval
+
+augment_eu <-mutate(augment_eu,
+                    upperbound = .fitted + (1.96 * .se.fit),
+                    lowerbound = .fitted - (1.96 * .se.fit)
+)
+
+```
+
+
+
+Next, lets make the prediction for the countries that are not in Europe.
+
+```{r}
+prediction_noteu <- mutate(gapminder,
+                           europe = 0) 
+
+augment_noteu <- augment(model3.ols, newdata = prediction_noteu)
+
+augment_noteu = mutate(augment_noteu,
+                       upperbound = .fitted + (1.96 * .se.fit),
+                       lowerbound = .fitted - (1.96 * .se.fit))
+
+
+```
+
+Now lets graph both predictions.
+
+```{r}
+
+ggplot(data = augment_noteu, aes(x = log_gdppercap, y = .fitted)) +
+  geom_ribbon(aes(ymin = lowerbound, ymax = upperbound),
+              fill = "blue", alpha = 0.3) +
+  geom_line(color = "blue") +
+  #now do it for the US
+  geom_ribbon(data = augment_eu, aes(ymin = lowerbound, ymax = upperbound),
+              fill = "red", alpha = 0.3) +
+  geom_line(data = augment_eu, aes(y = .fitted), color = "red") +
+  labs(x = "Log GDP Per Capita", y = "Life Expectancy (in Years)", title = "Global Health and Wealth", caption = "Europe is shown in red, and the rest of the world is shown in blue.")
+  
+
+```
+
+
+
+# Practice 3
+
+Lets make the prediction for countries that are not Kuwait.
+
+1. Create data frame where kuwait always = 0
+
+2. Create augmented data frame using your model from practice 2 and this new data frame.
+
+3. Calculate confidence interval.
+
+4. Make a plot showing the predicted value of lifeExp across values for log_gdppercap when the country is not Kuwait using ggplot.
+
+
+
+
+

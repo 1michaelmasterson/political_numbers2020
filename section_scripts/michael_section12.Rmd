@@ -1,0 +1,268 @@
+---
+title: "Section 12 Report"
+subtitle: "PS 270, Spring 2020"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+**Be sure to install the lfe package before running this code**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gapminder)
+library(lfe)
+library(broom)
+library(here)
+```
+
+I noticed some of you are still leaving in the default code chunks about cars that are created when you make a new R markdown file in your R markdown files that you submit. You should delete that! That is just to show you how to use an R markdown document the first time you make one.
+
+
+We need a log_gdp_per capital variable
+```{r}
+gapminder <- mutate(gapminder,
+                    log_gdp_percap = log(gdpPercap))
+```
+
+
+# Fixed Effects
+
+## Unit Fixed Effects
+
+Sometimes we want to control for confounders that are associated with units but do not vary over time. We can only do this if we have repeated observations of the same units over time (known as panel data). The unit could be individuals, states, countries, etc.
+
+We can accomplish this by adding unit fixed effects with the lfe package. Adding a unit fixed effect is like adding a dummy variable for each unit. In effect we are allowing each unit to have its own intercept. Lets do an example with lifeExp and gdpPercap from gapminder. In this case, the unit is country. Having country fixed effects means that we are accounting for factors that are constant within countries that could confound the relationship between lifeExp and gdpPercap.
+
+Adding unit fixed effects changes the interpretation of our model a bit because we are only examining variation within countries. Further, if there were any countries where either lifeExp or gdpPercap did not vary, they would be thrown out of the model. 
+
+First, lets make a normal linear model without fixed effects.
+
+```{r}
+model1 <- lm(lifeExp ~ log_gdp_percap, data=gapminder) 
+tidy(model1)
+```
+
+Now lets add country fixed effects with the lfe package. We will use the felm() command. The first part of the argument is the same as lm and takes, the dependent_variable ~ treatment. The components of the formula for the felm() function are separated using |. After the first | add the variable for our unit fixed effect. We follow this by | 0 to indicate that we are not using the part of the felm formula that comes after the second |. After the third | we put our unit variable again to cluster standard errors on this variable. When you have panel data, usually the errors will be correlated within the units. By clustering on the unit, we account for this. Lastly, we specify the data frame our variables come from.
+
+```{r}
+model1.fe <- felm(lifeExp ~ log_gdp_percap | country | 0 | country, data = gapminder)
+
+tidy(model1.fe)
+```
+
+Notice that when we call tidy on this model we do not get an intercept. This is because adding country fixed effects makes the intercept different for each country. The model does not print the intercept for each country because this is a lot of information and usually we do not care about those directly. Instead we only care that our treatment effect is not confounded by unobserved factors that are constant within countries.
+
+
+
+
+
+# Practice 1
+
+1. Make a model with lifeExp as the dependent variable and pop as the independent variable. Include fixed effects for country and cluster standard errors on country.
+
+2. Interpret the model.
+
+
+
+# Making Predictions with fixed effect models
+
+We have to make predictions a bit differently when we include fixed effects. First, lets just see what goes wrong if we try to make them like normal.
+
+```{r}
+
+prediction <- augment(model1.fe)
+
+
+ggplot(prediction, aes(y = lifeExp, x = log_gdp_percap)) +
+  geom_point() +
+  geom_line(aes(y=.fitted))
+
+
+
+```
+
+That looks strange and is not even a line. What went wrong? The problem is, each country has a different intercept. This means that there should be a different line for each country! Instead we tried to plot every observation on a single line and got a strange result.
+
+One solution is to just plot the predicted effect for a single country. For example, lets say we wanted to plot the predicted effect for Australia. We could use filter on the augmented data frame first and then pipe it to ggplot.
+
+
+```{r}
+prediction %>% filter(country=="Australia") %>% 
+ggplot(aes(y = lifeExp, x = log_gdp_percap)) +
+  geom_point() +
+  geom_line(aes(y=.fitted)) +
+  labs(x = "Log GDP Per Capita", y = "Life Expectancy in Years",
+       title="Predicted Effect of Development in Australia")
+
+```
+
+We could also try plotting a line for each country using the group aesthetic. In this case there are 142 countries, so it is more than we would actually want to show an audience in a plot. Still, it might be helpful to see, so you can better picture what it means to let each country have its own intercept.
+
+```{r}
+ggplot(prediction, aes(y = lifeExp, x = log_gdp_percap, group=country)) +
+  geom_point(alpha = 0.4) +
+  geom_line(aes(y=.fitted), color="blue") +
+  labs(x = "Log GDP Per Capita", y = "Life Expectancy in Years",
+       title="Predicted Effect of Development in Every Country")
+```
+
+# Practice 2 
+
+1. Make a prediction plot for Afghanistan using the model you made in Practice 1.
+
+2. Make a prediction plot that shows a seperate line for each country using the model you made in Practice 1.
+
+
+
+
+# Unit and Time Fixed Effects
+
+Sometime we might think in addition to unobserved confounders that do not vary across units, we might think that there are unobserved confounders that are constant across units that occur in particular time spans. For example, there could be a global pandemic that lowers both gdpPercap and lifeExp in a particular year. For another example, wars like the Vietnam War and the Korea War took place during the years for which we have gapminder data. We might think that these wars affected both lifeExp and gdpPercap across countries.
+
+
+You can add both time and unit fixed effects by using the same code you use to create a model with unit fixed effects and adding + time to the unit between the first two |. Notice that this means we are still clustering our errors on the unit, which is usually what we want to do. Models that include both unit and time fixed effects are sometimes called two-way fixed effects models.
+
+```{r}
+model1.2wfe <- felm(lifeExp ~ log_gdp_percap | country + year | 0 | country, data = gapminder)
+
+tidy(model1.2wfe)
+```
+
+
+# Writing functions
+
+## Function basics
+
+Often, there are tasks we need to do more than once using R. Instead of writing the code to do these tasks over and over again, we can create our own functions. That way whenever we need to do that task again, we can just call the function.
+
+Functions work like other R objects in that we can just assign our function to an object in R with the assignment operator. When making a function in R, you will need to use the keyword function followed by parentheses with the arguments your function will take inside of them. After the parenthesis, use bracers to define your function.
+
+For example, a simple function called two_mult that takes an argument x and multiplies it by 2, would look like this:
+
+```{r}
+
+two_mult <- function(x){
+  x * 2
+}
+
+
+```
+
+Lets try it!
+
+```{r}
+two_mult(10)
+two_mult(15)
+two_mult(16)
+
+```
+
+Notice that the function automatically returns the last value in the line. For more complicated functions, it is a good idea to explicitly write what the function will return using the return() function. We could write a two_mult function that performs exactly the same as our previous one but has an explicit return call like this.
+
+```{r}
+two_mult_new <- function(x){
+ result <- x * 10
+ return(result)
+}
+
+```
+
+Try it!
+
+```{r}
+two_mult_new(22)
+```
+
+Variables that are created inside of functions are used only for calculating what is returned by that function. You will not be able to call them outside of the function. See what happens when you uncomment the line below and try to call the result object that we made in our two_mult_new function.
+
+```{r}
+# result
+```
+
+Often you will go back and change a function you have written. When you do this, you need to reassign the new value of the function to the R object you assigned the function to. Otherwise when you call the function, you will get the old version.
+
+## An example of a useful function
+
+
+Something we have done often in section is make the plot of a predicted effect from a bi-variate model. Would it be possible to make a function to do that, so we could do it quickly with many different models? Yes!
+
+A function like that might take arguments for the independent variable, the dependent variable, the model, and what you want to label the x and y labels on the plot. One thing to note about functions is that you will need to pass the names of R objects that are inside of other objects to functions as strings (meaning in quotes). We have addressed this in the ggplot part of the function by using aes_string() that takes the quoted variable names instead of the regular aes() function.
+
+```{r}
+
+bivar_plot <-function(iv,dv,model, xlab, ylab){
+    prediction<-augment(model)
+      plot <- ggplot(prediction,
+                     aes_string(x=iv, y=dv)) +
+      geom_point() +
+      geom_line(aes(y=.fitted)) +
+      labs(x=xlab, y=ylab)
+    return(plot)
+}
+```
+
+First lets try using 
+
+```{r}
+
+bivar_plot(iv="log_gdp_percap", dv="lifeExp", 
+           model=model1, xlab="Log GDP Per Capita",
+           ylab="Life Expectancy (in Years)")
+```
+
+
+Why is this useful? Lets say we want to quickly make prediction plots like this for 2 bi-variate models where the dependent variable is lifeExp. In one, year is the independent variable, and in the other, pop is the independent variable. We can do this much more quickly and easily now that we have this function.
+
+Here it is for year:
+```{r}
+model.year <- lm(lifeExp ~ year, data = gapminder)
+
+bivar_plot(iv="year", dv="lifeExp",
+           model=model.year, xlab="Year", ylab="Life Expectancy (in Years)")
+```
+
+
+Here it is for population:
+
+```{r}
+model.pop <- lm(lifeExp ~ pop, data = gapminder)
+
+bivar_plot(iv="pop", dv="lifeExp",
+           model=model.pop, xlab="Population", ylab="Life Expectancy (in Years)")
+```
+
+Another task we often need to do over and over is calculate confidence intervals to make upperbound and lowerbound variables in the object we create with augment. Could we write a function to do this? Yes!
+
+```{r}
+calc_ci <-function(augmented_df){
+  result <- mutate(augmented_df,
+                   upperbound = .fitted + (.se.fit*1.96),
+                   lowerbound = .fitted - (.se.fit*1.96))
+  return(result)
+}
+```
+
+Lets try it out for model 1!
+
+```{r}
+
+prediction <- augment(model1)
+
+
+prediction <- calc_ci(prediction)
+# prediction
+```
+
+
+Wow! If we have a function like this instead of having to type all the code to calculate confidence intervals every time, we just have to type calc_ci and the name of our data frame!
+
+# Practice 3
+
+This practice is going to challenge you to think abstractly about function writing. For many of you this will be new, but if you can master it, you will be well on your way to being able to use functions to make your life much easier in R. Being able to think this way also makes it much easier to pick up other programming languages.
+
+The challenge is: create a function called bivar_plot_ci that makes a prediction plot like bivar_plot but also shows the confidence interval for the prediction line. (Hint: you can call functions inside of other functions! You should model the function you write on the original bivar_plot and use calc_ci inside of it)
+
+
+

@@ -1,0 +1,301 @@
+---
+title: "Section 6 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include=FALSE}
+library(here)
+library(tidyverse)
+library(gapminder)
+
+#for augment
+library(broom) 
+#otherwise you need to use broom::augument
+
+# we will use the longley dataset from here
+library(datasets)
+
+
+```
+
+
+# Linear Models
+
+Remember this: $y = mx + b$ ?
+
+When making a linear model, we write it differently, but the intuition is the same.
+$y_{i} = \alpha + \beta x_{i} + \epsilon_{i}$, where $Y$ is the dependent variable, $\alpha$ is the y-intercept, $\beta$ is
+the coefficient for our x variable, $x$ is our independent variable, and $epsilon$ indicates error. The i subscripts indicate that these parameters are indexed
+ by our observations. 
+ 
+What R is doing, is finding the values of $\alpha$ and $\beta$ that minimize $\epsilon^2$.
+ 
+Our predicted value of the dependent variable is called y hat and is written $\hat{y}$.
+It is calculated this way:
+$\hat{y_{i}} = \hat{\alpha} + \hat{\beta} x_{i}$.
+
+
+## Testing Hypotheses
+
+Remember variables can be related by chance?
+This is how we formally test whether or not there is a relationship,
+if we think the relationship is linear and y measured at the interval level. Lets examine this for gdpPercap and lifeExp.
+We do this with the lm() function. You should always save the results to a new object.
+
+lm() takes the following arguments
+
+* the dependent variable followed by ~ and the independent variable
+
+* the data the variables come from
+
+
+```{r}
+model1.ols <- lm(lifeExp ~ gdpPercap, data = gapminder)
+#call tidy on the model object to see the result
+tidy(model1.ols)
+```
+
+
+What does it mean? There are 3 main things we should interpret from our linear models. The first is the **sign** of the coefficient on our independent variable. In this case the coefficient is 0.000765, so the sign is positive. This means increases in gdpPercap are associated with increases in life expectancy. 
+
+The second is **size**, how large is our coefficient? THIS DEPENDS ON THE SCALE THE INDEPENDENT AND DEPENDENT VARIABLES ARE ON! In our case, the independent variable is measured in dollars and the dependent variable is measured in years. This means an increase in 1 dollar is associated with an increase in life expectancy of 0.000765 years. If a country's GDP per capita went up by 10,000 dollars, we would predict an increased life expectancy of 7.65 years.
+
+The third is **significance**. Is the relationship statistically significant, meaning can we reject the null hypothesis that the true coefficient on our independent variable is 0 at the 95\% confidence level. In our case, the p-value is 3.57e-156. This is less than 0.05, so we can reject the null hypothesis.
+
+Note that none of these can tell you whether the independent variable actually *causes* the dependent variable.
+
+
+Lets do another example examining the effect of GNP on employment. We will use the longley data set, which has measures of 7 different economic variables in the US each year from 1947 to 1962.
+
+First, we need to make GNP comparable over the years. Since the GNP is measured in dollars, inflation means that the value of the dollar in 1962 is not the same as its value in 1947, so we need to deflate GNP to make it comparable. We can do this by dividing GNP by with the deflator included in the longley data set to make an inflation adjusted GNP variable called real GNP.
+
+```{r}
+
+longley <-mutate(longley,
+                 realgnp = GNP / GNP.deflator)
+
+```
+
+
+
+Now lets make a linear model with Employed, which measures the number of people employed as the dependent variable and realgnp as the independent variable. 
+```{r}
+model2.ols <- lm(Employed ~ realgnp, data = longley)
+tidy(model2.ols)
+
+```
+
+
+
+
+# Practice 1 
+
+1. Add a variable to the longley data set that measures the proportion of the population that is employed called prop_employed. Hint: look at the other variables in the data set.
+
+2. Make a model that estimates the effect of realgnp on prop_employed.
+
+3. interpret the sign, size, and significance of the relationship between gdp and LifeExp.
+Note: this step is done by examining the results from the previous step.
+
+# Confidence Intervals
+
+
+The upper bound of a confidence interval is the $fitted\_value + (critical\_value \times standard\_error)$. The lower bound is the $fitted\_value - (critical\_value \times standard\_error)$.
+In the T distribution, the 95% critical value is approximately 1.96.
+
+We can use the augment() function from the broom package to create a data frame that includes the original independent and dependent variables. It includes a .fitted variable, which is the value our model predicts the dependent variable should take for that observation based on the independent variable. It also contains a .se.fit variable that expresses our uncertainty about this prediction. It also includes a .resid variable, which is the actual value of the dependent variable - our predicted value of the dependent variable. Here this is LifeExp - .fitted. You can ignore the other variables in the augmented data frame for now. 
+
+
+Lets make a data set of model 1 output.
+
+```{r}
+model1.pred <- augment(model1.ols)
+
+model1.pred
+
+```
+
+We can calculate the upper bound like this.
+
+```{r}
+model1.pred <- 
+  mutate(model1.pred, 
+         upperbound = .fitted + (.se.fit * 1.96))
+
+```
+
+
+We can calculate the lower bound like this.
+
+```{r}
+model1.pred <- 
+  mutate(model1.pred, 
+         lowerbound = .fitted - (.se.fit * 1.96))
+
+```
+
+
+
+Lets check our confidence interval for each observation.
+
+```{r}
+select(model1.pred, upperbound, .fitted, lowerbound)
+
+```
+
+
+
+## Plot Predicted values with CI
+
+After this, we can plot the predicted value of the dependent variable from our model along with a confidence interval.
+
+First, lets just do a scatter plot of the dependent and independent variables and add the prediction line.
+
+```{r}
+ggplot(data = model1.pred, mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point() +
+  geom_line(aes(y = .fitted)) +
+  coord_cartesian(xlim = c(0,  120000), ylim = c(0, 150))
+
+```
+
+
+
+
+Now lets also add the 95% confidence interval matches what we found with upper and lower bound.
+
+```{r}
+ggplot(data = model1.pred, mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point() +
+  geom_line(aes(y = .fitted)) +
+  geom_line(aes(y = upperbound), lty = 2) + #lty = 2 makes it a dashed line
+  geom_line(aes(y = lowerbound), lty = 2) +
+  coord_cartesian(xlim = c(0,  120000), ylim = c(0, 150)) +
+  #add labels
+  labs(title = "Predicted Effect", x = "GDP Per Capita", y = "Life Expectancy (in years)")
+
+```
+
+**Warning**: you may have seen that you can make a similar plot using geom_smooth(). Do not get in the habit of doing that because it will give you the wrong answer when your linear model contains more than two variables (which will be the case in your projects). 
+
+We also want to plot the predicted value of the dependent variable across the values of the independent variable with a confidence interval for our model of Employment and realgnp. First, we need to make a prediction data frame from our model output with augment().
+
+```{r}
+model2.pred <- augment(model2.ols)
+
+model2.pred
+
+```
+
+
+
+Next, lets calculate the lower and upper bound of the interval.
+
+```{r}
+model2.pred <- 
+  mutate(model2.pred, 
+         lowerbound = .fitted - (.se.fit * 1.96),
+         upperbound = .fitted + (.se.fit * 1.96)
+         )
+```
+
+
+
+Now we can plot the predicted value along with the confidence interval.
+
+```{r}
+ggplot(data = model2.pred, mapping = aes(x = realgnp, y = Employed)) +
+  geom_point() +
+  geom_line(aes(y = .fitted)) +
+  geom_line(aes(y = upperbound), lty = 2) + #lty = 2 makes it a dashed line
+  geom_line(aes(y = lowerbound), lty = 2)+
+  #add some labels
+  labs(title = "Predicted Effect", x = "Real GNP", y = "Number Employed")
+
+
+```
+
+
+# Practice 2
+
+1. Make a model that examines the effect of Armed.Forces on Employed.
+
+2. Interpret the sign, size and significance of the coefficient of Armed.Forces
+
+3. Use augment to create a prediction data frame from our model object called armed.pred
+
+4. Use this data frame to calculate the confidence interval around our predicted value of Employed (which is .fitted in the data frame).
+
+5. Plot Armed.Forces' effect on Employed with a confidence interval.
+
+
+
+# Residuals
+
+A residual is the difference between what our model predicts the dependent variable should be and its actual value.
+
+Lets plot the prediction line from model 1 against the actual data to see how we are doing.
+
+```{r}
+ggplot(model1.pred, mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point(color = "blue") +
+  geom_line(aes(y = .fitted)) #This makes a line if you supply all the y values
+
+```
+
+We can clearly see we are doing a bad job at predicting the lifeExpectancy of countries with GDP per capitas of over 40,000.
+
+
+If our linear model is a good fit for the data, then the residuals should look random. There should be no pattern. Lets plot the residuals and put a horizontal line at 0 (or perfect prediction) to see if there is a pattern.
+
+```{r}
+ggplot(model1.pred, mapping = aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0) #This makes a horizontal line
+
+```
+
+It looks like there is a clear pattern here. We know our model is not a good fit.
+
+
+
+Lets plot our predicted level of employment from the model against the real level of employment across the values of our independent variable.
+
+```{r}
+ggplot(model2.pred, mapping = aes(x = realgnp, y = Employed)) +
+  geom_point(color = "blue") +
+  geom_line(aes(y = .fitted)) 
+
+```
+
+Now lets plot the residuals to see if there is a pattern.
+
+```{r}
+ggplot(model2.pred, mapping = aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0) 
+
+```
+
+This looks like more like what we would want. The residuals seem random.
+
+
+# Practice 3
+
+1. Make a model that explains Employed with Population using the longley data.
+
+2. Make a prediction data frame from this model called modelp.pred.
+
+3. Make a scatter plot of the fitted values and residuals over the values of the independent variable. Add a horizontal line to this plot at y = 0.
+
+4. Interpret this plot. Are we a good fit?
+
+  

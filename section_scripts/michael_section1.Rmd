@@ -1,0 +1,379 @@
+---
+title: "Section 1 Report"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Basic Rmarkdown
+
+You can type a paper or a report using Rmarkdown. There are several benefits over using word processors including that,  your figures and tables will automatically update if your calculations change, the formatting of figures, tables, and equations is better, and it makes your paper automatically reproducible.
+
+To create a code chunk in Rmarkdown, use ctrl+alt+i (command+option+i on Mac). Your paper will include both the code and its output. You can adjust the options for each code chunk, so that it only includes one or none of these.
+You can also run this code from here by putting your cursor next to it and hitting control+enter (command+enter on Mac).
+
+
+
+
+```{r}
+2+2
+```
+
+You can embed your code in sentences by making rcode environments using a single back tick. Like this, the answer to 2+2 is `r 2+2`.
+
+You can also typeset equations in R by putting them between dollar signs. Like this, $Y = \alpha + \beta  x_{i} + \epsilon_{i}$. Try placing your cursor between the dollar signs to see how the equation will look in the paper.
+
+You can make a new section heading in your paper by using the pound sign and writing the section heading with returns on both sides of it like this.
+
+# Basic R
+
+
+
+
+This shows you what is in your environment, which right now should be nothing.
+
+```{r}
+ls()
+
+```
+
+
+
+
+Can use R to do basic math. Arithmetic operators: + - * / ^ exp(3) (adding, subtracting...)
+```{r}
+1 + 1
+
+3 * 2
+
+4^2
+
+pi
+
+sin(0)
+
+# square root
+sqrt(4)
+
+
+
+# use parentheses to group some operation
+
+(1 - 4) * 5
+
+
+# Compare this
+4^(1/2)
+
+# With this
+4^(1 / 2) # better
+
+
+```
+
+
+Note that spacing does not matter, but it is better to space out operators. This makes code more readable. You want it to be consistent in your spacing.
+
+
+
+The order of operations applies.
+```{r}
+(4 * 5) + 1
+1 + 4 * 5 # but you should still use parentheses for things like this
+(4 * 5) + 1
+
+```
+
+
+
+
+The assignment operator <- assigns a value to an object.
+```{r}
+my.object <- 10
+
+my.object
+
+```
+
+my.object is now saved in your environment
+Lets see it using the ls() function that shows the objects in your environment.
+
+
+```{r}
+ls()
+```
+
+
+
+
+You can put data into objects.
+
+
+```{r}
+hey <- 1000
+```
+
+If you call the object, it will return its value.
+
+```{r}
+hey
+```
+
+
+You can use the object in other commands.
+
+
+```{r}
+4 * hey
+
+```
+
+```{r}
+new <- hey + my.object
+
+new
+
+```
+
+
+
+You can overwrite objects.
+
+```{r}
+hey <- hey + 1
+
+hey
+
+
+my.object <- 1
+
+my.object
+```
+
+
+The logical operators are: ==, !=, >, >=, <, <= (we will come back to this in later lessons)
+
+```{r}
+4 > 2
+```
+
+
+# Practice 1
+Create a code snippet to use to answer these questions using ctrl+alt+i (command+option+i on Mac)
+
+
+* Question 1: what objects are in your environment
+
+
+* Question 2: what is the value of each object in your environment?
+
+# Sequences
+
+If I want a sequence of every number from 1 to 10, I can use:
+
+```{r}
+1:10
+```
+
+
+I can also do this with the seq command.
+
+```{r}
+seq(from = 1, to = 10, by = 1)
+```
+
+
+
+The seq command allows me to count by different intervals.
+```{r}
+seq(from = 1, to = 10, by = 2)
+
+seq(from = 1, to = 10, by = 0.5)
+
+
+```
+# Vectors
+
+Lets make a vector, x, that holds these values [5 4 9 1 7].
+
+
+```{r}
+x <- c(5, 4, 9, 1, 7) #The c here means concatenate, meaning stick these numbers together into one object
+
+x
+
+```
+
+
+What is $x_{4}$ or the fourth item in vector x?
+
+
+```{r}
+x[4]
+```
+
+
+How many elements are in x?
+
+```{r}
+length(x)
+```
+
+
+
+What happens if you add 1 to x?
+
+```{r}
+x+1
+```
+
+Multiply by 2?
+
+```{r}
+x*2
+```
+
+
+
+What if we add another vector (of the same length) to x?
+
+```{r}
+z<-c(1,2,3,4,5)
+
+x+z
+
+```
+
+
+We can calculate the sum of all the elements in x.
+
+```{r}
+sum(x)
+```
+
+
+Here is how to find the highest value in x.
+
+```{r}
+max(x)
+
+```
+
+
+Here is how to find the lowest.
+```{r}
+min(x)
+```
+
+
+
+
+This will take the mean.
+
+```{r}
+mean(x)
+```
+
+
+What if we only want to sum x from 2 to 4 (instead of all the way to the fifth element in x)
+
+
+```{r}
+sum(x[2:4])
+```
+
+
+# Practice 2
+
+Create a code snippet below and use it to answer the following questions.
+
+
+1. Use R to find $x_{2}$ then add 2 to it.
+
+2. Use R to find the mean of the first 3 values in x.
+
+# Comments
+
+```{r}
+# In R you can write comments in your code
+# This helps you remember what it does when you come back to it later
+# It also helps other people who might use your code later.
+
+
+
+# Any line that begins with a # is commented out
+# you can also use a # in the middle of a line to only comment out that part
+# 2+2 this is not run
+```
+
+
+```{r}
+2 + 2 #the math is run but the words are not
+
+
+# you can use the short of Ctrl+shift+c (on windows) or command +shift +c (on Mac) to comment in or out a line
+# try it here
+# 
+# 
+# if you
+# highlight multiple lines
+# you can use this shortcut to
+# comment them all in or out
+# try it on these last 5 lines
+
+#Be sure to comment those lines back out before you leave this snippet!
+
+```
+
+# Functions
+
+
+A function is something that takes an argument and returns a value.
+
+You have probably seen the function $y=f(x)$. In this function, y is a value and x is an argument.
+
+Almost every command in R is a function
+
+
+```{r}
+
+
+# for example, earlier when we found that mean of x we used the mean() function
+# In this cause, mean is the function, x is the argument and the mean of the vector
+# y is the value that is returned
+mean(x)
+
+
+### Some function take a default argument
+# like getwd()
+# for these you do not put anything in the ()
+
+getwd()
+
+
+
+# others require an argument
+# What happens if we run mean() with no arguments?
+# Remove the comment below and see. Remember to put it back afterwards!
+# mean()
+
+# In R if you want to know how a function works
+# you can type ?function_name
+
+# for example:
+# ?mean
+```
+
+# Practice 3
+
+1. Find out what the function names() does.
+
+2. What arguments does it take?
+
+# Build your report
+
+To compile this Rmarkdown file into an html report, hit control+shift+k (command+shift+k on Mac). You can also create a pdf report instead, which we will cover later in the semester. If you get an error compiling your report, find the line in the script where there is a mistake and try again.
+

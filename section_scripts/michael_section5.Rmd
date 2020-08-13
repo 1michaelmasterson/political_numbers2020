@@ -1,0 +1,331 @@
+---
+title: "Section 5 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(777) # this makes it so the random simulations we do will come out the same way each time.
+```
+
+
+Today we are going to work with the infer package. First, lets install it.
+
+```{r, include=FALSE}
+# install.packages("infer")
+```
+
+Hopefully, always librarying the packages you will use at the beginning of your R markdown file comes naturally to you now.
+
+```{r, include=FALSE}
+library(tidyverse)
+library(here)
+library(infer)
+library(gapminder)
+```
+
+Let's read in the pooling data from the Obama vs. Romney election we worked with last week.
+
+```{r}
+polls.data <-read_csv(here("data", "ex-1_polls_fl-oh-va.csv"))
+```
+
+# Statistics with Random Variables
+
+The variables that we work with in social science are random variables. This means they are drawn (or created) by a process that we cannot observe directly. This process is sometimes referred to as the data generating process.
+
+To make this concrete, let's think about our polling data from the 2012 election. What we would like to know is what the TRUE level of support is for Obama and Romney in Florida, Ohio, and Virginia is. However, we cannot directly measure this. Instead we have to sample a smaller number of people from each of these states and ask them who they support. Because of this, we observe the level of support with uncertainty.
+
+We need to take account of this uncertainty when we make inferences from our data.
+
+## Difference in Obama's Support Before and After the Debate
+
+What if we wanted to assess the claim that Obama's lead over Romney decreased after his first debate with Romney?
+
+The first thing we might do is just compare his margin of support, on average, before and after the debate.
+
+```{r}
+obama_margin_before_after <- polls.data %>% 
+  group_by(first_debate) %>% 
+  summarize(obama_mean = mean(obama_margin))
+obama_margin_before_after
+```
+
+It looks like his margin was lower after the first debate. 
+
+
+
+We might also want to look at the entire distribution of polls, rather than just the averages.
+
+ We can do this with ggplot with histograms by adding a fill arguement. The fill argument takes a second variable (which must be a categorical variable) across which we count the frequency of the first.
+ 
+```{r}
+#fill means we want to color in the bars based on the first debate variable
+ggplot(polls.data, mapping = aes(x = obama_margin, fill = first_debate)) +
+  # position="dodge" means we want the bars before and after the first debate
+  # side by side rather than stacked on top of each other
+  geom_histogram(position="dodge", bins = 30)
+```
+
+There definitely appears to be a negative shift in our data after the first debate. Can we conclude that this is a real difference and not just something that we could have found by chance?
+
+
+We can assess by using the infer package to simulate the kinds of differences we would expect to find by chance if there is no true difference. We will then compare the difference we found in our data and see if it is large enough to conclude that it was unlikely to be caused by chance.
+
+First lets use the infer package to calculate the difference in Obama's average margin before and after the first debate. Specify lets us tell it the dependent variable and the independent variable in order, separated by ~. The calculate function lets us tell it what we want to calculate. Here we want to know the difference in the mean of Obama's margin before and after the first debate.
+
+```{r}
+obs_diff_means <- polls.data %>% 
+  specify(obama_margin ~ first_debate) %>% 
+  calculate(stat = "diff in means", order = c("after", "before"))
+obs_diff_means
+
+# We can check this answer with the summary statistics we calculated
+#earlier
+obama_margin_before_after$obama_mean[1] - obama_margin_before_after$obama_mean[2]
+
+
+
+```
+
+Now lets simulate what we would expect the difference between Obama's margin before and after the first debate to be if the true difference was 0. We do this by assuming that the difference we observe would be normally distributed around 0 in this case. We specify the same as before. Now we need to add a hypothesis. We want to test the null hypothesis that there is no difference in Obama's margin across the values of the first debate variable. Another way of saying this is that obama_margin and first_debate are independent. Now that we have specified our hypothesis, we need to simulate the values of the difference in obama_margin we would expect under this hypothesis. We can do this with the generate function. The reps argument indicates how many simulations we want to conduct and the type argument tells it to repeatedly draw from these without replacement. Now we can use the calculate function the same as before to get the difference in means we would expect under this distribution.
+
+```{r}
+null_distribution <- polls.data %>% 
+  specify(formula = obama_margin ~ first_debate) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>% 
+  calculate(stat = "diff in means", order = c("after", "before"))
+
+
+
+```
+
+We can visualize the null distribution using the visualize() function. It uses ggplot to make a histogram of our simulation results.
+
+```{r}
+visualize(null_distribution, bins = 10)
+
+```
+
+Because it uses ggplot, we can add things to the plot using +. Lets add the actual difference in Obama's poll results we observe from the data to compare. We can do this using the shade_p_value() function, and giving it the difference in means we calculated earlier with the calculate function. Of course, we also need good labels.
+```{r}
+visualize(null_distribution, bins = 10) + 
+  shade_p_value(obs_stat = obs_diff_means, direction = "both") +
+  labs(x = "Change After First Debate", y = "Samples", title = "Observed vs. Simulated Difference in Obama's Margin")
+
+```
+
+
+We can also calculate the exact p-value with the get_pvalue() function.
+```{r}
+null_distribution %>% 
+  get_pvalue(obs_stat = obs_diff_means, direction = "both")
+```
+
+If p is less than 0.05 we can reject the null hypothesis that there is no difference with 95% confidence. This is not the same as proving the hypothesis that there is a difference, which can never be done with certainty.
+
+## Differences in Obama's Margin Across State
+
+What if we want to assess whether Obama's support is higher on average in Ohio than Virginia?
+
+First, lets make a new data frame that contains only observations from Ohio and Virginia, and then let's make a variable that takes the value TRUE if an observation is from Ohio and FALSE otherwise.
+
+```{r}
+oh.data <- polls.data %>% 
+  filter(state_abb !="FL") %>% 
+  mutate(ohio = state_abb == "OH")
+```
+
+Now we can use the infer package to see if this difference is greater than what we would expect by chance.
+
+```{r}
+oh_obs_diff_means <- oh.data %>% 
+  specify(obama_margin ~ ohio) %>% 
+  calculate(stat = "diff in means", order = c(TRUE, FALSE))
+oh_obs_diff_means
+
+oh_null_distribution <- oh.data %>% 
+  specify(formula = obama_margin ~ ohio) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>% 
+  calculate(stat = "diff in means", order = c(TRUE, FALSE))
+
+visualize(oh_null_distribution, bins = 10) + 
+  shade_p_value(obs_stat = oh_obs_diff_means, direction = "both") +
+  labs(x = "Difference in Ohio", y = "Samples", title = "Observed vs. Simulated Difference in Obama's Margin")
+
+```
+
+```{r}
+oh_null_distribution %>% 
+  get_pvalue(obs_stat = oh_obs_diff_means, direction = "both")
+```
+
+# Practice 1
+
+This code chunk will output a data frame called fl.data that is our polls data with an added variable called florida that takes the value TRUE if the state is Florida and FALSE otherwise.
+
+```{r}
+fl.data <- polls.data %>% 
+  mutate(florida = state_abb == "FL")
+```
+
+Use this data frame and what we have learned about the infer package to assess whether Obama's support is lower in Florida than the other states.
+
+
+
+# Confidence Intervals
+
+We can also use the infer package to calculate confidence intervals. Confidence intervals draw a bound around our estimate that expresses uncertainty. Usually, we use 95% confidence intervals. These can be interpreted as saying that we if conducted the analysis this way an infinite number of times, 95% of the times our intervals would cover the true value (this is not the same as saying we are 95% certain the true value is within the interval we construct).
+
+## Constructing a confidence interval for the difference after the first debate
+
+
+There are two differences in our approach when we want to use the infer package to construct a confidence interval around our observed value as opposed to comparing our observed value to a null distribution. First, we do not need to use the hypothesis function. Second, we need to give generate the argument type="bootstrap". 
+
+```{r}
+bootstrap_distribution <- polls.data %>% 
+  specify(formula = obama_margin ~ first_debate) %>% 
+  # Change 1 - Remove hypothesize():
+  # hypothesize(null = "independence") %>% 
+  # Change 2 - Switch type from "permute" to "bootstrap":
+  generate(reps = 1000, type = "bootstrap") %>% 
+  calculate(stat = "diff in means", order = c("after", "before"))
+```
+
+Now that we have our bootstrapped distribution, we can get a 95% confidence interval using the get_confidence_interval() function.
+
+```{r}
+percentile_ci <- bootstrap_distribution %>% 
+  get_confidence_interval(level = 0.95, type = "percentile")
+percentile_ci
+```
+
+
+
+We can visualize the our bootstrap distribution with the visualize() function, and we can add our confidence interval with the shade_confidence_interval() function.
+
+```{r}
+visualize(bootstrap_distribution) + 
+  shade_confidence_interval(endpoints = percentile_ci) +
+  labs(x = "Estimated Change After First Debate", y = "Samples", title = "Boostrapped Differences in Obama's Margin")
+```
+
+Because this range does not include 0, we can reject the null hypothesis that there is no difference in obama_margin before and after the first debate at the 95% level. You will always get the same result in terms of whether you can reject the null hypothesis regardless of whether you choose to construct a confidence interval or compare against the null distribution. Which way is more effective depends on the information you want to convey to your audience.
+
+
+## Constructing a confidence interval for the difference in Ohio
+
+```{r}
+oh_bootstrap_distribution <- oh.data %>% 
+  specify(formula = obama_margin ~ ohio) %>% 
+  generate(reps = 1000, type = "bootstrap") %>% 
+  calculate(stat = "diff in means", order = c(TRUE, FALSE))
+
+```
+
+```{r}
+oh_percentile_ci <- oh_bootstrap_distribution %>% 
+  get_confidence_interval(level = 0.95, type = "percentile")
+oh_percentile_ci
+```
+
+```{r}
+visualize(oh_bootstrap_distribution) + 
+  shade_confidence_interval(endpoints = oh_percentile_ci) +
+  labs(x = "Difference in Ohio vs. Virgina", y = "Samples", title = "Boostrapped Differences in Obama's Margin")
+```
+Just like before, we cannot reject the null hypothesis that there is no difference in Obama's support in Ohio vs. Virginia.
+
+# Practice 2
+
+Use what we just learned about the infer package to construct, visualize, and interpret a confidence interval of the estimated difference in obama_margin in Florida vs. the other states.
+
+Lets look at a way to examine associations in R, keeping in mind that finding statistical associations like this does not mean there is a causal relationship between these two variables. In future sections, we will learn how to control for other variables to increase the plausibility of causal conclusions based on the associations we find.
+
+First, remember scatter plots?
+
+```{r}
+ggplot(data = gapminder, mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point()
+
+```
+
+
+What if we want to plot a line that shows the relationship between x and y? We can use geom_smooth(method = "lm"). The (method="lm") part is critical. Otherwise, R will not make your line straight. 
+
+```{r}
+ggplot(data = gapminder, mapping = aes(x = gdpPercap, y = lifeExp)) +
+  #adds a line with a 95% confidence interval
+  geom_smooth(method = "lm")
+
+```
+
+
+
+we could also do this with the points if we wish.
+
+```{r}
+ggplot(data = gapminder, mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point() +
+  #adds a line with a 95% confidence interval
+  geom_smooth(method = "lm")
+
+```
+
+
+
+
+
+
+
+Okay but our result is not that good. When GDP per capita gets really high we are predicting outrageous life expectancies This is because the relationship is not linear. Instead, it is log linear (we will revisit this in detail in a future section). Lets make the natural log of gdpPercap a variable.
+
+```{r}
+gapminder <- mutate(gapminder,
+                    ln_gdpPercap = log(gdpPercap))
+```
+
+Now let's plot it.
+
+```{r}
+#scatter plot first
+ggplot(data = gapminder, mapping = aes(x = ln_gdpPercap, y = lifeExp)) +
+  geom_point()
+
+#Wow! that looks way better! Lets add the line now.
+ggplot(data = gapminder, mapping = aes(x = ln_gdpPercap, y = lifeExp)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+Now we get much more reasonable predictions for life expectancy.
+
+## Saving a plot with ggsave()
+
+Now that we have this plot, what if we want to save it as a file on our computer? We can do with ggsave and here. ggsave() will save the last ggplot to a location you provide. Here allows you to provide the folder and the file name (both in quotes) as arguments.
+
+```{r}
+ggsave(here("figures", "first_scatter_plot.pdf"))
+```
+
+
+
+# Practice 3
+
+1. Add a variable to gapminder called gdp that measures gdp. Hint(we did this early we just didn't save it).
+
+
+2. Make an appropriately labeled plot of this variable that shows both a scatterplot of with gdp as the y variable and pop as the x variable as well as a line with a 95% confidence interval that shows the relationship between these variables.
+
+
+
+3. Save this plot to your figures folder in a file called people_money.pdf
+
+
+4. What would be the problem with using this to show a causal relationship between gdp and pop? Note: use your brain and not R to answer this question
+
+

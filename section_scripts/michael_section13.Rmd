@@ -1,0 +1,421 @@
+---
+title: "Section 13 Report"
+subtitle: "PS 270, Spring 2020"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(broom)
+library(here)
+library(gapminder)
+```
+
+# Common Mistakes
+
+## Printing Data Frames
+
+Anytime you call the name of a data frame without assigning the results to anything, the data frame will print. For example, if you uncomment this code chunk, it will print the gapminder data frame.
+
+```{r, include=FALSE}
+# new_data <- gapminder
+```
+
+Also, any function that returns a data frame as a result, will print the data frame if you do not assign the result of the function to an object. This is true of most tidyverse functions like select, filter, summarize, group_by, and mutate. For example, if you uncomment the following code chunk, it will print a data frame.
+
+```{r}
+# gapminder %>%
+#   filter(lifeExp > 30) %>%
+#   select(country, lifeExp, year)
+
+```
+
+There are three ways you can prevent a data frame from printing. Any of these will work!
+
+1 Comment out the line that calls the data frame
+
+2. Set the code chunk where the data frame is called to include=FALSE
+
+3. Assign the results of the data frame call to an R object
+
+
+You should proof read every knitted document before you turn it in (this is especially important for the final paper). If you see a data frame printed to the knitted document, then you know you need to go back and take 1 of these steps to prevent it from printing. Then, knit the document again to ensure it is gone.
+
+
+
+## Spaces or Special characters in Variable Names
+
+I have seen many data sets where the variable names contain spaces or special characters like the \% character. This will cause trouble when you attempt to load the data into R because variable names should not contain spaces or special characters. Every time you reference a variable like this, you will have to use back ticks around the name. This is awkward and is just one more thing that can go wrong, so avoid it by giving your variables good names.
+
+Here are some examples of bad variable names:
+
+* Vote%
+
+* Trump Vote
+
+* GDP Per Capita
+
+* 100sofpop (variable names cannot start with numbers)
+
+* Clinton'sVote (contains apostrophe)
+
+* X1 (impossible to tell what this is)
+
+In general, avoid using any character that is not a letter or an underscore in variable names.
+
+There are two standard ways to name variables. The first one is called snake case. In snake case, all variable names are lower case and spaces are replaced with underscores. Here are some examples.
+
+```{r}
+vote_pct <-c(100, 20, 70)
+
+trump_vote <-c(100, 20, 70)
+
+gdp_percap <- c(100, 20, 70)
+
+pop_hundreds <- c(100, 20, 70)
+
+clinton_vote <- c(100, 20, 70)
+```
+
+The other acceptable way to name variables is camel case. Instead of underscores, camel case uses capitalization to replace spaces. Here are some examples.
+
+```{r}
+votePct <-c(100, 20, 70)
+
+trumpVote <-c(100, 20, 70)
+
+gdpPercap <- c(100, 20, 70)
+
+popHundreds <- c(100, 20, 70)
+
+clintonVote <- c(100, 20, 70)
+```
+
+It does not matter whether you use camel case or snake case, but you should pick one and be consistent.
+
+## Variables The Wrong Class
+
+I have seen many numeric variables that are either character or factor class. If you try to use a variable like this in a model you will get the wrong answer. You should always make sure the class of your variables match the kind of data they contain. If there is text in the values of a variable that should be a number, it needs to be removed because it will cause R to treat the entire variable as text. This includes special characters like \%.
+
+Compare
+```{r}
+good_result <- lm(lifeExp ~ gdpPercap, data= gapminder)
+tidy(good_result)
+```
+
+with
+
+```{r}
+bad_data <- mutate(gapminder,
+                   gdpPercap = as.factor(gdpPercap))
+
+bad_result <- lm(lifeExp ~ gdpPercap, data=bad_data)
+tidy(bad_result)
+```
+
+
+If your data frame is a tibble, then you can just print it to the console to see the class of each variable. Otherwise, you can use the str() function to see the class of every variable in a data frame or the class() function, to see the class of a specific variable.
+
+```{r}
+str(gapminder)
+
+class(gapminder$pop)
+```
+
+To change a variables class to number, just use mutate() and as.numeric.
+
+```{r}
+good_data <- mutate(bad_data,
+                    gdpPercap = as.numeric(gdpPercap))
+
+class(good_data$gdpPercap)
+```
+
+## Data in Wide Format
+
+If you have multiple variables that measure the same thing in different places/years, then you data is in wide format and cannot be used for analysis. Lets review how this looks and how to fix it.
+
+```{r, include=FALSE}
+country_wide <- read_csv(here("data", "country_wide.csv"))
+
+country_wide
+```
+
+
+
+What we want is temp in one variable and year in one variable.
+
+```{r}
+
+country_long <- country_wide %>% 
+  pivot_longer(c(avgtemp.1994, avgtemp.1995, avgtemp.1996), names_to = "year", values_to = "avgtemp")
+```
+
+
+Our year variable should not contain text.
+
+```{r, include=FALSE}
+country_long
+```
+
+
+
+str_replace() will take out the extra text in our year variable. The function str_replace() takes the following arguments, a variable, the pattern you want to replace, what you want to replace the pattern with. Now we can change the variable's class to numeric, so we can do math with it
+
+```{r}
+country_long <- country_long %>% 
+  #remove average temp and replace with nothing
+  mutate(year = str_replace(year, pattern = "avgtemp.", replace = "")) %>% 
+  #make year numeric
+  mutate(year = as.numeric(year))
+
+```
+
+
+```{r, include=FALSE}
+country_long
+
+```
+
+## Proportion vs. Percentages
+
+There was some confusion about proportions and percentages on problem set 3. A proportion is measured from 0 to 1. If you have a variable that measures the proportion of the vote that Trump received, 0 means he received none of the vote, 1 means he received all of the vote, and 0.5 means he received half of the vote. A percentage is measured from 0 to 100. If you have a percentage measuring how much of the vote that Trump received, 0 means he received none of the vote, 100 means he received all of the vote, 50 means he received half of the vote.
+
+Pay attention to whether your variables are measured as percentages or proportions, and make sure you refer to them correctly in the text. If you want to covert a proportion to a percentage, you can multiply it by 100. 
+
+## Linear Models
+
+There is still sometimes confusion about the interpretation of linear models.
+
+```{r}
+model_result <- lm(lifeExp ~ gdpPercap, data = gapminder)
+tidy(model_result)
+```
+
+You should interpret the coefficient as telling you the effect of a 1 unit increase in the independent variable on the dependent variable. GDP per capita is measured in dollars and life expectancy is measured in years, so our coefficient tells us that a 1 dollar increase in GDP per capita is associated with a 0.000765 year increase in life expectancy.
+
+When you interpret significance, make sure you look at the p-value for the coefficient on the treatment and not at some other p-value. The p-value on our coefficient here is 3.57e-156. Sometimes R gives p-values in scientific notation like this. The e means times 10 raised to the power of the number following the e. You should read this p-value as 3.57 times ten raised to the negative 156. This means you would move the decimal place to the left 156 times, so our number is much less than 0.05. If you are ever unsure you can use round() which takes a number and the amount of numbers after the decimal place you want to round to.
+
+```{r}
+round(3.57e-156, 2)
+```
+
+Because the p-value is less than 0.05, we can reject the null hypothesis that the true value of the coefficient is 0 at the 95% level. This is the same thing as saying that the relationship between gdpPercap and lifeExp is statistically significant at the 95% level.
+
+# Practice 1
+
+Imagine that the code chunks below are part of your final paper. Find and correct the mistakes in each of the following.
+
+1. You want to add a GDP variable to gapminder. 
+```{r}
+mutate(gapminder,
+                gdp = gdpPercap * pop)
+
+gapminder <- mutate(gapminder,
+                    gdp = gdpPercap * pop)
+
+gapminder
+```
+
+2. You are interpreting the following regression result. 
+
+```{r}
+practice_result <- lm(lifeExp ~ pop, gapminder)
+tidy(practice_result)
+```
+This is what you have written so far:
+
+The coefficient is $7.90 \times 10^{-9}$, which means that as life expectancy increases by 1, population increases by $7.90 \times 10^{-9}$. The p-value is 0.00731, which is less than 0.05. This means we can reject the null hypothesis that the relationship is significant at the 95% level.
+
+
+
+# For Loops
+
+Sometimes we need R to perform a task repeatedly. One way to get R to do this is to use a for loop. For loops use the keyword `for`. Following for in parenthesis you should include an index, i, the keyword `in`, and a range of numbers. After this, use curly bracers to contain the task you want repeated.
+
+For example, if you wanted to use a for loop to print the phrase "this is a four loop" five times, it would look like this.
+
+```{r}
+for(i in 1:5){
+  print("this is a for loop")
+}
+```
+
+An important feature of for loops is that the index increases, each time R runs through the loop. To see this, run the following code chunk.
+
+
+```{r}
+for(i in 1:5){
+  print(i)
+}
+```
+
+The reason this is important is because i can be used in square brackets to access different parts of R objects in each loop. Lets do an example that exploits this. Imagine that I want to run 3 different bi-variate regression models with lifeExp as the dependent variable and pop, gdpPercap, and gdp as the independent variables and get the p-value for the coefficient. If I remember that I cause use data frame[, number_of_column] to get a variable in a data frame like this:
+
+```{r, include=FALSE}
+gapminder[ , 4]
+```
+
+and use names to see that pop, gdpPercap, and GDP are the fifth, sixth, and seventh column of gapminder respectively,
+```{r}
+names(gapminder)
+```
+
+then I can use a for loop to run all three models at once. If you want to assign multiple objects to the results of a for loop. Then you need to create an object of the same length as the results to put them in first. Lets create an empty object of length 3 to put our coefficients in.
+
+```{r}
+p_vals <-c(NA,NA,NA)
+```
+
+A way to do this without typing NA each time is to use the replicate function rep()
+
+```{r}
+p_vals <- rep(NA, 3)
+```
+
+
+Now we can make our loop.
+```{r}
+for(i in 1:3){
+  y <- gapminder$lifeExp
+  column <- i + 4
+  x <- gapminder[, column] %>% 
+    unlist()
+  model <- lm(y ~ x)
+  p_vals[i] <- tidy(model)$p.value[2]
+}
+```
+
+
+We can examine our coefficients for each model like this:
+
+```{r}
+p_vals[1]
+p_vals[2]
+p_vals[3]
+```
+
+You could have run each of these 3 models yourself, but imagine you needed to do something like this 100s of times or more. You would definitely want to use a for loop!
+
+# Practice 2
+
+You have your 3 p-values in the object p_vals. Write a for loop to check if each one is < 0.05. First, create an object called significant to store the results.
+
+# Function Writing Part 2
+
+Some basics that we did not cover last time have to do with function names. Do not make a function with the same name as a function, package, or R object that already exists.
+
+## Variables as function arguments
+
+One complication that we discussed about function writing last week is that you cannot pass the names of objects that are inside of other objects directly as arguments. We were able to get around this issue by using aes_string() and passing the names as strings. How can you handle this if you need to use the object in a function that will not accept a string argument?
+
+You can use the get() function inside of your function to resolve this problem. The get() function takes 2 arguments. First, the name of an object as a string (meaning in quotes) and second the object that the first object is inside of. Lets see an example.
+
+```{r, include=FALSE}
+get("pop", gapminder)
+```
+
+Now lets see how to use this inside of a function to get around the problem of not being able to pass variable names directly. Last time, we wrote a function to plot the results of a bi-variate model. What if we want to make a function to run a bi-variate model?
+
+```{r}
+bivarLm <- function(dv, iv, data){
+  #' takes a dependent variable, independent variable, and a data frame and returns a linear model
+  dv <- get(dv, data)
+  iv <- get(iv, data)
+  model <- lm(dv ~ iv)
+  return(model)
+}
+```
+
+Lets try out our function!
+
+```{r}
+model1 <- bivarLm(dv="lifeExp", iv="gdpPercap", data=gapminder)
+tidy(model1)
+
+model2 <- bivarLm(dv="lifeExp", iv="pop", data=gapminder)
+tidy(model2)
+```
+
+## Functions with default arguments
+
+Sometimes we know we are going to supply the same argument to a function almost every time. In this case, we can create our function with default arguments, so that if we leave an argument blank, the function will automatically fill it in with the default.
+
+Lets imagine we want to write a function to do what we did previous where we made 3 bi-variate models with lifeExp as the dependent variables and pop, gdpPercap, and GDP as the independent variables. In this case, we know we will always use lifeExp as the dv and gapminder as the data, so we can make these the default arguments.
+
+When you make a function with default arguments, you have to list the default arguments after all the arguments without defaults have already been listed. You can give an argument a default by adding = your_default_argument_here.
+
+```{r}
+newBivarLm <-function(iv, dv="lifeExp", data=gapminder){
+  #' takes a dependent variable, independent variable, and a data frame and returns a linear model
+  dv <- get(dv, data)
+  iv <- get(iv, data)
+  model <- lm(dv ~ iv)
+  return(model)
+}
+```
+
+Lets test it!
+
+```{r}
+model3 <- newBivarLm(iv="gdpPercap")
+tidy(model3)
+```
+
+
+However, you also do not *have* to use the default values of the function. If we want to use another dependent variable, we still can!
+
+```{r}
+model4 <- newBivarLm(iv = "gdpPercap")
+tidy(model4)
+```
+
+However, be careful about using default arguments. You do not want to forget to change them when you need to. If you are writing a function where it would be catastrophic if you used the default argument by mistake, then do not supply a default argument. It is better to get an error reminding you that you forgot to supply an argument than to use the wrong argument and not realize it.
+
+
+## Functions Inside of for Loops
+
+You can combine the time saving power of functions and for looks. Watch how little code it takes to do what we did before and create there models with lifeExp as the dependent variables and pop, gdpPercap, and GDP as the independent variables and get the p-values.
+
+```{r}
+new_p_vals <- rep(NA, 3)
+for(i in 1:3){
+    iv <- names(gapminder)[i+4]
+    model <- newBivarLm(iv)
+  new_p_vals[i] <- tidy(model)$p.value[2]
+}
+```
+
+Lets check the result.
+
+```{r}
+new_p_vals[1]
+new_p_vals[2]
+new_p_vals[3]
+```
+
+## Function Writing tips
+
+When you write a function, it should only do one thing. If you want a function that does a bunch of things, for example fit a model, calculate confidence intervals, and plot the predicted effect, it is better to make 3 functions that do each of these things. Then you can write a fourth function that combines them. This way it is easier to fix each part if something goes wrong. It also enables you to use the smaller pieces later both on their own and as components of larger functions.
+
+
+# Practice 3
+
+Here is a modified version of the bi-variate plot function we made last week.
+```{r}
+bivarPlot <-function(iv,dv,model, xlab, ylab){
+    prediction<-augment(model)
+      plot <- ggplot(prediction,
+                     aes(x=iv, y=.fitted)) +
+      geom_line() +
+      labs(x=xlab, y=ylab)
+    return(plot)
+}
+```
+
+Write a new function called fitPlot that combines bivarLm with bivarPlot to fit a model and return the predicted effect plot. Use it once. (Hint: remember that the model bivarLm returns will call the independent variable iv no matter what it was called originally.)
+
+

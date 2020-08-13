@@ -1,0 +1,416 @@
+---
+title: "Section 3 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Useful keyboard shortcuts:
+
+* control (command) + shift + enter runs entire code chunk
+
+* control (command) + alt (option) + p runs all chunks above. This is useful for catching up if you needed to restart R.
+
+Let's library the packages we will use.
+```{r, include=FALSE}
+library(gapminder)
+
+
+library(tidyverse)
+```
+
+
+
+# Function Arguments 
+
+You can either give arguments to a function by name, such as argument_name = value, or you can just give the value in the order that the function expects. If you give your arguement by order, make sure you supply the arguments in the correct order! Let's see how this works with the seq() function below.
+
+```{r}
+?seq
+
+
+seq(1, 10, 1)
+
+# is different than:
+# seq(10, 1, 1) # try uncommenting this line and see what happens
+
+# Whereas when you specify by name, you can place the arguments in any order
+seq(to = 10, from = 1 , by = 1)
+
+
+
+# Mixing and matching specifying by name and order will work but you should avoid it
+# and try to be consistent
+seq(1, by = 1, 10)
+
+```
+
+
+
+# count()
+Remember distinct(), which tells you all the values a variable takes?
+
+```{r}
+distinct(gapminder, continent)
+
+```
+
+Compare it to count(), which gives you the number of times a variable takes a particular value. Just like distinct, the first argument is the dataframe and the second argument is the variable. This is a common format for tidyverse functions and most of the functions we will learn today take  these arguments.
+
+```{r}
+
+count(gapminder, continent)
+# table(gapminder$continent)
+
+
+# or
+
+count(gapminder, country)
+
+```
+
+
+
+
+
+
+# select()
+select() chooses a particular variable from a dataframe. 
+
+If we want to do something with year we can:
+
+```{r}
+select(gapminder, year)
+
+```
+
+
+Simularly for population:
+
+```{r}
+select(gapminder, pop)
+
+```
+
+
+Like many tidyverse functions, select outputs a dataframe. We can use  select to make a smaller version of our dataframe that only includes country, year and pop.
+
+```{r}
+smaller.dataframe <- select(gapminder, country, year, pop)
+
+#lets see it
+smaller.dataframe
+
+```
+
+
+
+
+You can also specify a variable you want to exclude using -.
+ Lets make a dataframe without the continent variable but including all other variables.
+
+
+```{r}
+no_continent.data <- select(gapminder, - continent)
+
+#let's see it
+no_continent.data
+
+```
+
+
+# arrange()
+
+arrange puts a dataframe in order from least to greatest If we want to see the dataset from lowest population to highest  we can:
+
+```{r}
+arrange(gapminder, pop)
+
+```
+
+
+If instead we want greatest to least we can add the desc() function around our variable (for descending order).
+```{r}
+arrange(gapminder, desc(pop))
+```
+
+
+So far we have just printed the dataframe to the console in different orders. If we actually want our dataframe to stay in this order, then we need to save over it.
+
+```{r}
+gapminder <-arrange(gapminder, desc(pop))
+
+gapminder
+
+```
+
+
+## When should you write over your data?
+
+Only save over your dataframe when you are sure what you want to do will work. If you mess up your original dataframe, then you will have to load it again and start over. If you want, you can first check the results of your command by assigning the results to a new object.
+
+Never overwrite the original file on your computer the data comes from! You do not need to worry about this too much yet, because we have not learned how to do this. However, keep this warning in mind for later. Instead of overwriting the original, save a new file of the transformed data and hang on to the code you used to transform it.
+
+
+# Mutate()
+
+We can create a new variable with the mutate command and then save the dataset over our data that includes the new variable using the assignment operator <-.
+
+Like select, mutate's first argument is the dataframe. Unlike select, its second argument is the name of your *new_variable* = (some function).
+
+If we want to make a gdp variable my multiplying gdp per capita by population we can:
+
+
+```{r}
+#remember to save the new dataframe over itself with <- or your new variable will not be saved!
+
+gapminder <- mutate(gapminder,
+                  gdp = gdpPercap*pop
+                  )
+
+#lets see if it is there
+gapminder
+
+```
+
+
+What about if I want a log GDP per capita variable?
+
+
+```{r}
+gapminder<-mutate(gapminder,
+                  ln_gdpPercap = log(gdpPercap))
+
+#lets see it
+gapminder
+
+```
+
+
+# Practice 1
+
+1. Add a new variable to the gapminder dataset that is the log of population. Do not forget to save the new version of the gapminder dataset that includes the variable over the old version!
+
+2. Create a new dataset called new.data that includes all of the variables in gapminder except pop.
+
+3. Put new.data in order from greatest to least ln_gdpPercap and save the new.data object in that order.
+
+```{r}
+
+gapminder <- mutate(gapminder,
+                    ln_pop = log(pop))
+
+
+new.data <- select(gapminder, - pop)
+
+new.data <- arrange(new.data, desc(ln_gdpPercap))
+new.data
+
+```
+
+
+
+# filter()
+
+Earlier we used  select to select particular variables (or columns) from our dataframe. What if we want to select particular observations (or rows) instead? To do this, we can use filter().
+
+
+
+The syntax for filter is:
+
+* first argument is the dataframe
+
+* second argument is a condition based on the data
+
+
+For example, what if we only want to look at observations in the year 2002?
+
+```{r}
+filter(gapminder, year == 2002) # the == is important here. It tells R this is a logical condition that the variable on the left takes the value on the right
+
+```
+
+
+If we want to save this as a new dataset, we can:
+
+```{r}
+year_2002.data <- filter(gapminder, year == 2002)
+year_2002.data
+
+```
+
+
+
+You can use other logical conditions as well. What if we only want observations after 2002?
+
+```{r}
+filter(gapminder, year > 2002)
+
+#before 2002
+filter(gapminder, year < 2002)
+
+
+#After and including 2002
+filter(gapminder, year >= 2002)
+
+#all the years except 2002
+filter(gapminder, year != 2002) # != means not equal
+
+filter(gapminder, !is.na(year))
+
+
+```
+
+
+You can also use filter with catagorical data (variables that are either character or factor class in R). For example, lets find all of the rows that contain data for Kuwait.
+
+```{r}
+filter(gapminder, country == "Kuwait")
+```
+
+
+
+# Practice 2
+
+1. Create a new dataframe called healthy.data that includes only observations from gapminder where lifeExp is greater than its median. Hint: you can use the median() function to get the median value of a variable.
+
+
+2. Find out how many times each continent appears in this dataframe.
+
+```{r}
+healthy.data <- filter(gapminder, lifeExp > median(lifeExp))
+
+count(healthy.data, continent)
+
+
+select(healthy.data, continent)
+
+
+```
+
+
+
+# summarize()
+
+Remember how we can use summary(dataframe) to get summary stats for every variable?
+
+```{r}
+summary(gapminder)
+
+```
+
+
+What if we only care about 1 variable? We can use the summarize() command. The arguments that summarize takes are the dataframe and new_variable_name = summary function. For example, lets get the mean population.
+
+```{r}
+summarize(gapminder, mean(pop))
+```
+
+
+
+We could get other values too like the median
+
+```{r}
+summarize(gapminder, median(pop))
+
+#or the standard deviation
+summarize(gapminder, sd(pop))
+
+```
+
+
+
+We can combine these results and provide variable names to get a summary dataframe.
+
+```{r}
+sum.data<-summarise(gapminder,
+                    mean_pop = mean(pop),
+                    median_pop = median(pop),
+                    sd_pop = sd(pop))
+
+sum.data
+```
+
+
+
+
+
+# group_by()
+
+The summarize command by itself might not be that impressive, but when it is
+combined with group_by() we can use it to find out information that we could not otherwise get!
+
+
+What if I want to know the mean GDP percapita of all of the continents? Just calling summary() on our dataframe will not give us the answer.
+
+
+First lets make a new dataset that is grouped by continents.
+
+
+```{r}
+continents.data <- group_by(gapminder, continent)
+
+#lets look
+continents.data
+
+```
+
+
+Now if we call summarize, it will behave differently!
+
+```{r}
+summarize(continents.data, mean(gdpPercap))
+
+```
+
+It gives us the mean of gdp per capita by continents.
+
+
+We could also save this as a new dataframe. In this case, we should specify the new variable name, like we would when using mutate().
+
+```{r}
+summary.data <- summarize(continents.data, mean_gdPpercap = mean(gdpPercap))
+summary.data
+```
+
+
+# Practice 3
+
+1. Make a dataset grouped by country called country.data.
+
+
+2. Find out the mean life expectancy by country and save this information in a variable called mean_lifeExp in a dataframe called country.data.
+
+3. What country has the lowest mean_lifeExp?
+
+4. Using the gapminder data, make an appropriately labeled histogram of ln_gdpPercap.
+
+
+```{r}
+country.data <- group_by(gapminder, country)
+
+country.data <- summarize(country.data,
+                          mean_lifeExp = mean(lifeExp))
+arrange(country.data, mean_lifeExp)
+
+filter(country.data,
+       mean_lifeExp == min(mean_lifeExp))
+
+
+
+
+```
+
+```{r}
+ggplot(gapminder, mapping = aes(x = ln_gdpPercap)) +
+  geom_histogram() +
+  labs(title = "Global Health", x = "(Log) GDP Per Capita",
+       y = "Number of Countries")
+```
+
+
+

@@ -1,0 +1,258 @@
+---
+title: "Section 4 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# R Projects
+
+R projects are how you manage the files you use in R for a particular project on your computer. Lets make an R project for this class. First lets use the project menu in the upper right to create an R project (if you are on Rstudio Cloud, you won't be able to do this). Name the project folder something about this class. Inside this folder, you should create the following folders with these EXACT names:
+
+* data
+
+* figures
+
+* rmd
+
+After you create an R project, a .Rproj file will appear in that folder. From now on, ALWAY open Rstudio by clicking on that Rproj file instead of the Rstudio icon. This will ensure that R will be able to find all of the files we create. You can check in the upper right hand corner of your screen to make sure your Rstudio session is in the Rproject if you are even uncertain.
+
+# Setup
+
+The here package is another tool that is valuable for telling R where your files are. Uncomment the following line and install it.
+
+```{r}
+# install.packages("here")
+```
+
+
+
+```{r, include=FALSE}
+library(here)
+library(tidyverse)
+library(gapminder)
+
+```
+
+
+
+
+
+
+# read_csv
+
+What is a csv file? csv stands for comma seperated values. It is a way of representing data_frames that can be saved to your harddrive.
+
+
+
+Let's take a look at one. By default, it will open into Excel or Excel-like program. Commas seperate the columns. Line breaks or returns seperate the rows. Try looking at it in text!
+
+
+
+There are some rules for variables names you should know.
+
+* variable names must be oneword
+
+* variable names cannot start with a numerical value
+
+* the top row of your csv file MUST be variable names
+
+
+
+## How do we get a csv file into R?
+
+```{r}
+?read_csv
+```
+
+
+This reads in the dataset to a dataframe called data. here() allows us to provide the name of the folder that contains the data and the name of the file (both in quotes) as arguments.
+
+```{r}
+data <- read_csv(here("data", "ex-1_polls_fl-oh-va.csv"))
+```
+
+Now it is a dataframe in R just like any other you have worked with. You can change this dataframe in R without altering the original csv file.
+
+
+# Pipes: n_row, count
+
+Pipes are the symbol %>%. You can use control+shift+m as a shortcut to write a pipe. Pipes move the output from the previous line to the next line and are sometimes a faster or easier to read way of writing code.
+
+I want to know how many polls were taken in different states at different times. We can use pipes to combine group_by and count to get this information.
+
+
+```{r}
+data %>% 
+  group_by(state_abb) %>% 
+  count(poll_end)
+
+```
+
+
+I want to print ALL of them!
+
+
+
+```{r}
+data %>% 
+  group_by(state_abb) %>% 
+  count(poll_end) %>% 
+  print(n = 226) # this is not ideal, I had to hard code that
+```
+
+
+To find out how many rows are in an object use the nrow function.
+
+```{r}
+nrow(data)
+```
+
+Lets replace 226 with nrow of whatever is in the pipe. This way, if the size of the data changes, code will still perform as desired.
+
+```{r}
+data %>% 
+  group_by(state_abb) %>% 
+  count(poll_end) %>% 
+  print(n = nrow(.)) # Better because dynamic
+
+```
+
+
+# Pipes: filter, count
+
+I want to know how many polls in each state Obama is ahead in.
+
+
+```{r}
+data %>% 
+  group_by(state_abb) %>% 
+  filter(obama_margin > 0) %>% 
+  count()
+
+```
+
+
+
+This is helpful. However, I also want to know how many he is behind in and how many are tied.
+
+
+```{r}
+#how many behind
+data %>% 
+  group_by(state_abb) %>% 
+  filter(obama_margin < 0) %>% 
+  count()
+
+
+
+#how many tied
+data %>% 
+  group_by(state_abb) %>% 
+  filter(obama_margin == 0) %>% 
+  count()
+
+```
+
+
+
+
+What if I want to find the poll where obama's lead is the biggest in each state?
+
+
+```{r}
+data %>% 
+  group_by(state_abb) %>% 
+  filter(obama_margin == max(obama_margin))
+
+```
+
+
+# Practice 1
+
+1. Count how many polls were taken in each state before and after the first debate. USE PIPES!
+
+
+2. Find the latest poll taken in each state. USE PIPES! ((Hint: later dates are 'greater' than earlier dates)
+
+
+3. Why did you get more than one poll for each state in Question 2? (Use your brain and not R to answer this question)
+
+
+
+# Let's redo 1-3 in Practice 3 from last week with pipes
+
+Here is a demonstration of how pipes can simplify code. Remember that practice 3 was a pain because we needed to keep saving over our data?
+ 
+Here is what Practice 3 asked us to do:
+
+1. Make a dataset grouped by country called country.data.
+
+
+2. Find out the mean life expectancy by country and save this information in a variable called mean_lifeExp in a dataframe called country.data.
+
+3. What country has the lowest mean_lifeExp?
+
+
+
+
+With pipes we can do this in a single step!
+
+```{r}
+gapminder %>% 
+  group_by(country) %>% 
+  summarize(mean_lifeExp = mean(lifeExp)) %>% 
+  arrange(mean_lifeExp) 
+```
+
+
+
+Lets take some time to unpack this by only highlighting a row at a time.
+
+
+# Mutating with pipes
+
+What if we wanted to do the same thing we just did except with GDP and currently we do not have a GDP variable?
+
+The mutate command to create it just slides right in the pipe. 
+
+```{r}
+gapminder %>% 
+  mutate(gdp = gdpPercap*pop) %>% 
+  group_by(country) %>% 
+  summarize(gdp = mean(gdp)) %>%
+  arrange(gdp)
+```
+
+Keep in mind, we did not save a version of our dataframe that contained this new gdp variable. If we wanted to do other things with it, then we would want to take the mutate part out of the pipe and assign it to an object. Do not just mindlessly always use or always not use pipes. Think about whether it is appropriate for what you are doing.
+
+
+
+
+
+
+# Practice 2
+
+Complete these two questions in 1 step using pipes.
+
+1. We often measure U.S. voting using a political party’s share of the two-party vote: the vote percentage for a party when we set aside Independent and third-party voters. We would calculate the Democratic share of the two-party vote using the following equation. Dem. share of two-party vote = Dem. vote(Dem. vote + Rep. vote) Create this variable using mutate() and call it dem_2party.
+
+2. Calculate the mean of Obama’s two-party vote share in each state. Group the combined data ( polls ) by state, and find the mean in each group. If you group_by() the state, calculating the mean with summarize() would give you the mean in each group.
+
+
+
+
+
+
+# Causal Inference vs. Association
+
+The fundamental problem of causal inference is that we cannot observe the outcome (this means the same as dependent variable) of an observation both with the treatment (this means the same as independent variable) and without receiving it.
+
+Finding an association or correlation between two variables does not necessarily mean there is causation. There are all kinds of association that are not causal. Often this is because of some omitted variable. For example, in the 1950s, the army found the variable most associated with how good of a typist you were was how small your feet were. It turned out that feet size was predicting your gender and it tended to only be women that were trained as typists during the time period. There was a period where NATO membership and the number of Autism cases were highly correlated. Why? Both were going up over time.
+
+
+

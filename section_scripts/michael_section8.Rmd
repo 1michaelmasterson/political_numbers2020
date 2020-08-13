@@ -1,0 +1,442 @@
+---
+title: "Section 8 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+**Be sure you have states.csv, state_level.csv, individual_level.csv, vote.csv, war.csv, p4v2017.csv, and NMC4.csv in your data folder before starting this section.**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(broom)
+library(gapminder)
+```
+
+
+# Load  Polity 
+
+
+Polity is a data set that contains regime data at the country-year unit of analysis.
+
+We care about the ccode variable that labels the country the data is about, the year variable that indicates which year the data is from, and polity that ranks countries from -10 to 10 on how democratic they are.
+Lets simplify to just those variables.
+
+```{r}
+
+
+polity.data <- read_csv(here("data", "p4v2017.csv"))
+
+polity.data <- select(polity.data, ccode, country, year, polity)
+
+```
+
+We can examine the data with include=FALSE, so that the data frame will not print to our knitted document.
+```{r, include=FALSE}
+
+polity.data
+
+summary(polity.data)
+```
+
+The minimum of polity is -88. This is a problem because polity should never be < -10. Are there other problem values?
+
+```{r, include=FALSE}
+polity.data %>% 
+  distinct(polity) %>%
+  arrange(polity)
+```
+
+
+Yes there is also -77.
+
+# Recode and Fix Missing Values with case_when()
+
+We need to convert -77 and -88, which the code book says indicate missing values, to NA. What if we also want to change polity into a variable that indicates whether or not a country is a democracy? Lets define countries with 6 and above on polity as democracies. We can do both of these things with case_when().
+
+case_when() takes a series of formulas where the left hand side is a logical test, and the right hand side is the value to return.
+
+```{r}
+polity.data <- mutate(polity.data,
+                      #first just fix polity
+                      polity = case_when(
+                        #you cannot just use NA for case_when
+                        #it must match the datatype of the rest of the values
+                        polity < -10 ~ NA_real_,
+                        TRUE ~ polity),
+                      #you can have more than 2 cases
+                      demo  = case_when(
+                        polity > 5 ~ 1, 
+                        polity < 6 ~ 0,
+                        TRUE ~ NA_real_)) #Your last one should be a catchall TRUE
+
+summary(polity.data)
+
+```
+
+# Load NMC data
+
+The second data frame we want to work with is country-year level data on military capabilities.
+```{r}
+nmc.data <-read_csv(here("data", "NMC4.csv"))
+
+```
+
+
+We only care about the variables ccode, year, and milex, which is how much a country spent on the military in a year.
+
+Lets simplify.
+
+```{r}
+nmc.data <- select(nmc.data,
+                   ccode, year, milex)
+
+```
+
+Lets examine the data.
+
+```{r, include=FALSE}
+
+nmc.data
+
+
+
+summary(nmc.data)
+```
+
+
+milex should never be negative. Are there any other problem values?
+
+```{r, include=FALSE}
+nmc.data %>% 
+  distinct(milex) %>% 
+  arrange(milex) 
+
+```
+
+We can fix it the same way with mutate and case_when.
+
+```{r}
+nmc.data <- mutate(nmc.data,
+                  milex = case_when(milex < 0 ~ NA_real_,
+                                    TRUE ~ milex))
+
+#its okay now
+summary(nmc.data)
+
+```
+
+# inner_join Dataframes
+
+To join data frames they must be at the same unit of analysis. The variable(s) that label unique rows need to have the same name(s).
+
+Both polity and nmc are at the country-year level and have variables labeled ccode and year that identify each row.
+What if the variables are named different? We can rename them like this.
+
+```{r}
+polity.data <- rename(polity.data, year = year)
+
+```
+
+
+
+To join the data frames we can use the inner_join() function. inner_join takes as arguments the data frames you want to join and a by argument that is the name(s) of the variable(s) that identify each row in quotes. If there is more than 1 variable,
+they must be concatenated.
+
+
+```{r}
+joined.data <- inner_join(polity.data, nmc.data, by = c("ccode", "year"))
+```
+
+```{r, include=FALSE}
+#lets see it
+joined.data
+
+
+```
+
+
+
+
+inner_join will only include rows that contain data from each table! Even though polity starts in 1800,
+ NMC does not start until 1816, so that is where our joined data set starts.
+
+```{r}
+summary(joined.data$year)
+
+```
+
+There is an exact way we can compare variables from our original data frame and our new joined data frame to see what rows, if any, the joined data frame has thrown out. To do this, use the setdiff() function.
+
+
+```{r}
+setdiff(polity.data$year, joined.data$year)
+```
+
+
+# Practice 1
+
+1. Read states.csv and vote.csv into separate R objects.
+
+2. Join the data frames using inner_join()
+
+3. Does the joined_data frame contain all the original rows? If any differ, what is the state_id of the row that is different?
+
+
+
+
+# left_joint 
+
+Read in war.csv as a tibble. Each row in this data set is a war. The unit of observations is war.
+
+
+```{r, include=FALSE}
+war.data <- read_csv(here("data", "war.csv"))
+war.data
+
+```
+
+
+Throw away all the variables except ccode, StartYear1, and WarType.
+
+```{r}
+war.data <- select(war.data, ccode, StartYear1)
+
+```
+
+
+
+Rename variables as needed.
+
+```{r}
+war.data <- rename(war.data, year = StartYear1)
+
+```
+
+
+We need a variable that records a war happened, *but* first we should check whether there are some years where more than 1 war happened with a single country.
+
+```{r, include=FALSE}
+war.data %>% 
+  group_by(ccode) %>% 
+  count(year) %>% 
+  arrange(desc(n))
+
+```
+
+There are, so we have to be careful. We need to make a variable that sums wars grouped by both ccode and year and then put that variable at the same level of analysis as the original data.
+
+First lets just make a war indicator. Every row in war.data is a war, so we will make a variable that is 1 for all rows to indicate a war happened.
+
+
+```{r}
+war.data <- mutate(war.data,
+                   war = 1)
+
+```
+
+
+
+We can group_by() multiple variables to count total number of wars that happened in a particular country-year.
+
+```{r}
+war.data <- war.data %>% 
+  group_by(ccode, year) %>% 
+  # group_by(year) %>% 
+  mutate(num_wars = sum(war)) %>% 
+  # we can ungroup to get back to the level of the original dataset
+  ungroup()
+
+
+summary(war.data)
+
+```
+
+
+Now we can join this with our NMC data, but *wait,* war data is only 337 rows. If we use inner_join() we will be throwing out a lot of rows where we actually have data. What we want to do is keep all the rows from nmc.data and use the war.data to fill values in where we can. To do this, we can use left_join() to include all rows from the first data set and only matching rows from the second data set.
+
+```{r}
+warjoin <- left_join(nmc.data, war.data, by = c("ccode", "year"))
+
+
+```
+
+```{r, include=FALSE}
+warjoin
+```
+
+
+Lastly, we need to recode NA on war and numwars to 0. This is because every observation in our war data was a war. We have no observations for country-years that are not wars. This means, if an observation is missing for our war variable, that no war took place.
+
+```{r}
+warjoin <- mutate(warjoin,
+                  war = case_when(
+                    is.na(war) ~ 0,
+                    TRUE ~ war
+                  ),
+                  num_wars = case_when(
+                    is.na(num_wars) ~ 0,
+                    TRUE ~ num_wars
+                  ))
+
+warjoin
+
+summary(warjoin)
+
+```
+
+# Practice 2
+
+You want to see if states where more people like the color red also tend to vote more Republican. You have individual-level polling data on how much people like red on a scale of 1-10 and state-level data on the percentage that vote for the GOP.
+
+1. Read individual_level.csv and state_level.csv into 2 separate R objects.
+
+2. Use group_by and summarize to create a state-level data set of people's average color preferences by state.
+
+3. Join the two data frames using inner_join().
+
+4. If you had used left_join() instead, would the result have been different? Why or why not?
+
+
+
+
+
+# Nonlinear Relationships
+
+Lets make a GDP variable in gapminder. 
+
+```{r}
+gapminder <- mutate(gapminder,
+  gdp = pop * gdpPercap
+)
+
+```
+
+
+
+Now lets make variables that are the natural log of pop and gdp.
+
+```{r}
+gapminder <-mutate(gapminder,
+                   log_pop = log(pop),
+                   log_gdp = log(gdp))
+
+```
+
+
+Remember how in a previous section when we tried to explain life expectancy with gdp we did not do very well. Our model predicted that people in rich countries would live to over 125. The problem is that the relationship between wealth and life expectancy is not linear. After wealth increases beyond a certain point, it does not really make people live longer. Often, taking the natural log of the independent variable is a good way to model relationships like this.
+
+
+```{r}
+
+model.ols2 <-lm(lifeExp ~ log_gdp + log_pop, data = gapminder)
+tidy(model.ols2)
+
+
+```
+
+
+
+
+## Multiple Prediction with log-linear Relationships
+
+We want to see the effect of log_GDP holding log population constant!
+We should hold population at its mean.
+
+First make a data frame prediction data frame from original data.
+```{r}
+prediction.data <- gapminder
+
+```
+
+
+Now set log_pop to its mean for every row.
+
+```{r}
+prediction.data <- mutate(prediction.data,
+                         log_pop = mean(log_pop))
+
+```
+
+
+
+
+Now we can use augment to predict using our new prediction data!
+
+```{r}
+model2.predict <- augment(model.ols2, newdata = prediction.data)
+
+```
+
+```{r, include=FALSE}
+model2.predict
+
+```
+
+
+
+We should calculate our confidence interval. We can do this the same way we always have.
+
+```{r}
+model2.predict <- mutate(model2.predict,
+                         upperbound = .fitted + (.se.fit * 1.96),
+                         lowerbound = .fitted - (.se.fit * 1.96))
+
+```
+
+Lets make a graph of our predictions.
+
+```{r}
+ggplot(data = model2.predict, aes(x = log_gdp, y = lifeExp)) +
+  geom_point()+
+  geom_ribbon(aes(ymin = lowerbound, ymax = upperbound), alpha = 0.4) +
+  geom_line(aes(y = .fitted)) +
+labs(x = "Log GDP", y = "Life Expectancy in Years",
+     title = "Health and Wealth")
+
+```
+
+
+  
+We can do even better than this. Log gdp might be difficult for our audience to interpret. We can re-scale the x axis.
+
+First, we can use the exponentiation function exp() to reverse taking the log to get back our original gdp variable. Next we can put our gdp variable on the scale of billions of dollars instead of just dollars by dividing by 1 billion.
+```{r}
+
+model2.predict <-mutate(model2.predict,
+                          gdp = exp(log_gdp),
+                        gdp_billions = gdp / 1000000000)
+
+```
+
+Now we can graph using this new scale.
+
+```{r}
+ggplot(data = model2.predict, aes(x = gdp_billions, y = lifeExp)) +
+  geom_point() +
+  geom_ribbon(aes(ymin = lowerbound, ymax = upperbound), alpha = 0.4) +
+  geom_line(aes(y=.fitted)) +
+  labs(x = "GDP (in Billions)", y = "Life Expectancy in Years",
+     title = "Health and Wealth") 
+
+```
+
+
+
+# Practice 3
+
+You want to make a similar graph based on model.ols2 showing the effect of population on life expectancy holding gdp constant.
+
+1. Create a data frame that has the necessary variables and holds log_gdp to its mean value.
+
+2. Using Augment(), use model.ols2 to predict on this new data frame.
+
+3. Calculate the confidence interval.
+
+4. Create a variable called pop_mil that is population in millions. Hint: remember to exponentiate log_pop first.
+
+5. Graph the predicted value of life expectancy with a confidence interval across pop_mil. 
+
+

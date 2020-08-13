@@ -1,0 +1,283 @@
+---
+title: "Section 10 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+**Be sure to download merged_kyoto.csv and my_did.csv to your data folder before running this code.**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(broom)
+library(gapminder)
+
+
+set.seed(777)
+
+```
+
+merged_kyoto.csv contains data from gapminder on C02 emissions, GDP per capita, and my own coding of whether a country signed on to Annex B of the Kyoto protocol that commits a country to limit emissions (I exclude the US which never ratified). It also has a dummy variable that takes the value of 1 in the years 1997 and after marking the years when the Kyoto protocol was signed.
+
+my_did_data contains some fake US data at the state-year level with a variable measuring turnout, a dummy variable for the 25 states that received at get out the vote campaign at the end of 2002 and a dummy variable that takes the value of 1 for the years 2002 and after.
+
+```{r, include=FALSE}
+merged_kyoto <- read_csv(here("data", "merged_kyoto.csv"))
+
+my_did_data <-read_csv(here("data", "my_did.csv"))
+```
+
+
+
+# Difference in Difference
+
+Difference in difference designs can be used when the treatment is assigned to certain units (which could be geographic regions, governments, or individuals) at a particular time and not others and the researcher has data on the dependent variable both before and after the assignment period.
+
+Difference in difference designs are effective at controlling for trends that could be due to unobservable factors, which cannot be included in a model directly. They can also control for differences between the groups that receive the treatment and do not receive the treatment that do not vary over time. For example, if I want to study whether the Kyoto protocol lowered emissions, I might think that emissions are going up over time and that I need to account for this when I compare emissions after the protocol was signed to emissions before it was signed. I might also think that the countries that signed the protocol had either higher or lower emissions than countries that did not sign and I need to account for this. A difference in difference design allows me to account for both factors.
+
+To implement a difference in difference design, I need a variable that marks the units that received the treatment. In the Kyoto example, this is countries that signed on to Kyoto Annex B. I also need a variable that marks the period after the treatment was assigned. In the Kyoto example, this is a variable that takes a value of 1 for the year 1997 and the following years, when Annex B was signed and 0 otherwise.
+
+To do a difference in difference, I need to interact these variables.
+
+
+```{r}
+
+
+emissions_dnd <- lm(emissions ~ kyoto_annexb * kyoto_adopted_year,
+                    data=merged_kyoto)
+
+
+summary(emissions_dnd)
+
+
+
+```
+
+In interpreting the difference in difference design, the term I care about is the interaction term. This term will tell me how the change in the dependent variable  before and after the treatment was assigned differed in the units that received the treatment and the units that did not. In the case of the Kyoto example, it tells me how much more or less emissions increased in countries that signed Kyoto Annex B.
+
+The sign is negative, indicating that Kyoto Annex B decreased emissions by 75,894 metric tons per person. However, we cannot reject the null hypothesis at the 95% level because the p-value is above 0.05. However, we could reject the null hypothesis at the 90% level because the p-value is below 0.1.
+
+
+
+Lets do another example where we want to assess the effect of (a made up) get out the vote campaign on voter turnout that was implemented in 25 out of 50 US states at the end of 2002. We will interact a variable marking the states that received the campaign with a variable that marks years after 2002.
+
+
+```{r}
+
+turnout_did <- lm(turnout ~ get_out_vote_year * get_out_vote_states, data = my_did_data)
+
+summary(turnout_did)
+
+```
+
+It appears that the get out the vote campaign increased voter turnout by about 10.5 percentage points (voter turnout is measured as a proportion). We can reject the null hypothesis because the p-value is less than 0.05.
+
+# Practice 1
+
+Use a difference in difference design to examine the hypothesis that countries that signed on to the Kyoto Protocol's Annex B had lower growth in GDP per capita.
+
+1. Run a difference in difference regression with the appropriate variables.
+
+2. Interpret your results.
+
+
+
+
+
+# Examining Difference in Difference Assumptions
+
+The difference in difference design makes the assumption that, had the treatment not occurred, the units that received the treatment would have had the same trend in the dependent variable as the units that did not receive the treatment. This is called the parallel trends assumption. In the Kyoto example, this means that in the hypothetical case that no countries signed Annex B, we are assuming that the countries that did sign it would have a similar change in C02 emissions before and after 1997 as countries that did not sign it.
+
+This assumption cannot be definitively tested, but there are some ways to assess how plausible it is.
+
+The first is to graph the trend in the dependent variable over time in the treated and untreated groups and examine whether the trend in the groups appears to be the same prior to the assignment of the treatment.
+
+```{r}
+
+grouped.data <- merged_kyoto %>% 
+  group_by(kyoto_annexb, kyoto_adopted_year, year) %>% 
+  summarise(mean_emissions = mean(emissions, na.rm=TRUE))
+
+grouped.data
+
+
+
+ggplot(grouped.data, aes(x = year, y = mean_emissions, group=as.factor(kyoto_annexb), color=as.factor(kyoto_annexb))) +
+  geom_line() +
+  geom_vline(xintercept = 1997)
+
+```
+
+In this case, the data does not look good for the parallel trends assumption. Emissions were decreasing in countries that signed Annex B before they signed but emissions were increasing in countries that did not sign. This calls into question our difference in difference results.
+
+
+Another way to examine this assumption is to test the hypothesis using a fake treatment assignment time in the period before the real treatment was assigned. If the difference is significant, it suggests that the treated and untreated groups had different trends. Lets examine this for the Kyoto data for the years 1995 and 1996 with 1996 as the fake treatment time.
+
+```{r}
+kyoto_trends.data <- merged_kyoto %>% 
+  filter(year %in% c(1995, 1996)) %>% 
+  mutate(
+    fake_treat_time = case_when(
+      year >=1996 ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+
+formal_kyoto_trends_test <- lm(emissions ~ kyoto_annexb * fake_treat_time,
+                               data= kyoto_trends.data)
+summary(formal_kyoto_trends_test)
+```
+
+The difference between the groups is not statistically significant. Still it is important to keep in mind that this is a weak test because we are trying to reject the null hypothesis that there is no difference. Remember, we will find the difference not significant 95% of the time. A stronger test would force us to reject the null hypothesis that there is a difference, but we cannot perform this kind of test.
+
+Another way to assess the assumptions behind the difference in difference design is to look for differences between groups that did not receive the treatment. If we find a difference, it suggest that factors other than the treatment that affect the dependent variable are changing at the same time the treatment was assigned, which would call our results into question. For example, lets look for a difference between countries in the Americas other than Canada and countries in Africa, none of which signed Annex B, before and after 1997 when Annex B was signed.
+
+```{r}
+
+kyoto_fake_groups <-merged_kyoto %>% 
+  mutate(
+    fake_group = case_when(
+      continent == "Africa" ~ 1,
+      continent == "Americas" & country !="Canada" ~ 0,
+      TRUE ~ NA_real_
+    )) %>% 
+      filter(!is.na(fake_group))
+
+
+
+fake_group_test <- lm(emissions ~ fake_group * kyoto_adopted_year,
+                      data = kyoto_fake_groups)
+
+summary(fake_group_test)
+
+```
+
+
+
+Now lets examine the parallel trends assumption for the get out the vote campaign analysis. First, lets graph the difference between the treated and untreated groups over time.
+
+
+```{r}
+
+
+
+grouped_turnout.data <- my_did_data %>% 
+  group_by(get_out_vote_year, get_out_vote_states, year) %>% 
+  summarise(mean_turnout = mean(turnout))
+
+# grouped_turnout.data
+
+
+
+ggplot(grouped_turnout.data, aes(x = year, y = mean_turnout, group=as.factor(get_out_vote_states), color=as.factor(get_out_vote_states))) +
+  geom_line() +
+  geom_vline(xintercept = 2002)
+
+
+
+```
+
+
+Now lets use a fake treatment time of 2001 and see if we find a difference between treated and untreated groups in the years before the treatment was assigned.
+
+```{r}
+before_states.data <-filter(my_did_data,
+                            year <=2002
+  ) %>% 
+  mutate(
+    fake_treat_time = case_when(
+      year > 2001 ~ 1,
+      TRUE ~ 0
+      
+    )
+  )
+
+
+
+trends_test <- lm(turnout ~ get_out_vote_states*fake_treat_time, data = before_states.data)
+
+summary(trends_test)
+
+
+```
+
+# Practice 2
+Assess the credibility of the parallel trends assumption for the model in practice 1.
+
+1. Gapminder only has data for every 5 years. We need to make sure that we do not include years where gapminder data is missing. Filter out all the rows of the merged_kyoto data where gdpPercap is missing.
+
+2. Make a plot that shows the average trend in GDP per capita for countries that did and did not sign on to Kyoto Annex B in the years preceding 1997.
+
+3. Using just data from the years 1987 and 1992, run a test of the parallel trends assumption with 1992 as the fake treatment year.
+
+4. Interpret your results. Do they support the parallel trends assumption?
+
+
+
+# Logisitic Regression
+
+Until now our linear models have assumed that the dependent variable is continuous. If the dependent variable is instead binary, only taking the values of 0 and 1, we need to use a different kind of model or our results will be biased. An example of a binary dependent variable is whether or not a country signed on to Annex B of the Kyoto Protocol in 1997.
+
+Lets test the hypothesis that countries with a higher log GDP per capita were more likely to sign on to Annex B.
+
+First, we need to make sure we are only using data before Annex B was signed to predict the outcome. Lets use data from 1992 which is the closest year before 1997 when we have GDP data and create a log GDP variable.
+
+```{r}
+
+
+logit.data <- filter(merged_kyoto,
+                     year == 1992) %>% 
+  mutate(log_gdp_percap = 
+           log(gdpPercap))
+
+```
+
+Now lets use glm with the argument family=binomial(link="logit") to run a logistic regression.
+
+```{r}
+
+
+kyoto_logit <- glm(kyoto_annexb ~ log_gdp_percap, family=binomial(link="logit"), data = logit.data)
+
+tidy(kyoto_logit)
+
+```
+
+You can interpret sign and significance just as before. Because the coefficient is positive, the model indicates countries with higher GDPs are more likely to sign on to Annex B. Because p is < 0.05, we can reject the null hypothesis. However, the coefficients of logistic regression have a different interpretation for their size. These coefficient are in units of the log odds ratio, which is less intuitive to interpret. It is easiest to interpret the size by graphing the predicted probability that the dependent variable is 1.
+
+
+To do this, we can use augment just as before with 1 **critical change**. This change is that we add the argument type.predict = "response", so that our .fitted variable will come back as a predicted probability instead in terms of the log odds ratio.
+
+```{r}
+logit_augment <- augment(kyoto_logit, type.predict = "response")
+
+
+logit_augment <- mutate(logit_augment,
+  upperbound = .fitted + (1.96*.se.fit),
+  lowerbound = .fitted - (1.96*.se.fit),
+  gdp_percap = exp(log_gdp_percap))
+
+```
+
+```{r}
+ggplot(logit_augment, aes(x = gdp_percap, y = kyoto_annexb)) +
+  geom_point() +
+  geom_line(aes(y=.fitted)) +
+  geom_ribbon(aes(ymin=lowerbound, ymax=upperbound), alpha =0.4) +
+  labs(x = "GDP per capita",
+       y = "Probability of Signing Kyoto Annex B")
+```
+
+# Practice 3
+
+You want to test the hypothesis that countries with higher emissions are more likely to sign onto the Kyoto protocol using logit.data.
+
+1. Run a logistic regression with kyoto_annexb as the dependent variable, emissions as the treatment, and log_gdp_percap as a control variable.
+
+2. Interpret the result in terms of sign and significance (save size for the plot).
+
+3. Plot the predicted probability of signing Kyoto Annex B across the values of emissions. Hint(remember to hold log_gdp_percap constant at its mean).
+

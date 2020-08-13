@@ -1,0 +1,302 @@
+---
+title: "Section 7 Report"
+author: "Michael Masterson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+**Before starting, make sure you have the following data sets in your data folder: who2009.csv, sideways_polls.csv, county.csv, country_wide.csv, and messy_wide.csv.**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(broom)
+```
+
+
+# Load and Prepare Data
+
+```{r, include=FALSE}
+who.data <- read_csv(here("data", "who2009.csv"))
+
+# we don't need all of the variables
+who.data <- select(who.data,
+                  country, v9,
+                  v22,
+                  v159, v168,
+                  v174,
+                  v186,
+                  v192,
+                  v249,
+                  v259,
+                  regionname)
+
+```
+
+This data frame has bad variable names because you cannot tell what the variable is by its name. Lets give it better names using the renames() function. The first argument is the data frame with the variables you want to rename. Then, you can add arguments that take the form new_variable_name = old_variable_name.
+
+```{r}
+
+
+who.data <- rename(who.data,
+                   life_exp = v9,
+                   infant_mort = v22,
+                   health_workers = v159,
+                   hosp_beds = v168,
+                   health_spend = v174,
+                   private_spend = v186,
+                   percap_spend = v192,
+                   tfr = v249,
+                   gnp_percap = v259
+                   )
+
+
+```
+
+
+
+
+
+# Multiple Regression
+
+We can add additional control variables to our regression in order to strengthen the plausibility of our causal conclusions. This is important because to make causal conclusions from our regression, we need to make the *selection on observables assumption* that there are no omitted variables. An omitted variable is a variable that affects both our independent and our dependent variable.
+
+The equation for multiple regression takes the following form.
+$y = \alpha + \beta_{1}x_{1} + \beta_{2}x_{2} +\beta_{3}x_{3} + ... + \epsilon$
+
+$\beta_{1}$ is the effect of $x_{1}$ all else constant.
+
+$\alpha$ is predicted value of y when all x variables are 0.
+
+*Warning*: you should not make the mistake of causally interpreting your control variables! Your regression is set up to identify the effect of your independent variable on your dependent variable. Probably you would need to run a different regression that includes different variables if you wanted to include all of the variables that might affect both your control variable and the dependent variable.
+
+
+
+If we want to find the effect of health workers on life expectancy, we might think health spending and GNP per capita could be confounders. It might be that more health spending leads to more health workers and also improves life expectancy through better health supplies. We might also want to control for GNP per capita if we think that people living in more developed countries are likely to live longer and these countries are also likely to have more health workers.
+
+```{r}
+who.ols1 <- lm(life_exp ~ health_workers + health_spend + gnp_percap, data = who.data)
+tidy(who.ols1)
+
+```
+
+
+# Multiple Prediction
+
+When doing multivariate prediction, we need to hold the control variables constant. Conventionally, we do this by holding them at their average values, so we predict for the more typical cases in the data.
+
+To do multivariate predictions we need to create a new data frame where the values of our variable are what we want to predict with.
+
+First make a data frame prediction data frame from original data. You MUST include the DV in the prediction data. The easiest way is just to copy everything.
+
+```{r}
+who_predict.data <- who.data
+```
+
+
+Now set the control variables to their mean for every row. We need to add the argument na.rm =TRUE, to remove the missing values before taking the mean. Also it is important we assign these variables over the original control variables, because augment() will look for variables with the same name as the variables in the original regression.
+
+```{r}
+who_predict.data <- mutate(who_predict.data,
+                           health_spend = mean(health_spend, na.rm = TRUE),
+                           gnp_percap = mean(gnp_percap, na.rm = TRUE)
+                           )
+
+```
+
+
+Now we can use augment to predict on our new prediction data!
+
+```{r}
+who1.predict <- augment(who.ols1, newdata = who_predict.data)
+
+```
+
+
+We should calculate our confidence interval. We can do it exactly as before.
+
+
+```{r}
+who1.predict <- mutate(who1.predict,
+                         upperbound = .fitted + (.se.fit * 1.96),
+                         lowerbound = .fitted - (.se.fit * 1.96))
+
+```
+
+
+
+Lets make a graph of our predictions.
+
+```{r}
+ggplot(data = who1.predict, aes(x = health_workers, y = .fitted)) +
+  geom_ribbon(aes(ymin = lowerbound, ymax = upperbound), alpha = 0.4) +
+  geom_line() +
+labs(x = "Health Workers (per 10,000 in population) ", y = "Life Expectancy in Years",
+     title = "Predicted Effect of Health Workers on Life Expectancy", caption = "Control variables are held at their means.")
+
+```
+  
+# Practice 1
+
+
+1. Using who.data, run a multivariate regression with infant_mort (which measures deaths between birth and age 1 per 1000 live births) as the dependent variable and hosp_beds (which measures the number of hospital beds per 10,000 in the population) as the independent variable. Include health_spend and gnp_percap as controls.
+
+2. Examine the regression results. Which variable(s) should you interpret the results for? Interpret the sign, size, and significance of this variable.
+
+3. If you wanted to graph the predicted effect of your independent variable on the dependent variable, which variable(s) would you need to hold at constant value(s)?
+
+
+# Transpose
+
+Sometimes data sets are not well structured to work with R, so we need to change them before we do analysis. There are a lot of different ways this can happen. You should read the assigned sections of chapter 12 of R for Data Science to see some others and ways to fix them that might apply to situations you could face in your projects. Today we are going to learn how to fix it when data frames are sideways.
+
+Before we read it in, lets take a look at this mess in excel: sideways_polls.csv.
+
+How can we read this in to R? There are no variable names so set col_names to FALSE.
+Otherwise, the values of state will be treated as the variable names.
+
+
+```{r, include=FALSE}
+sideways.data <- read_csv(here("data", "sideways_polls.csv"),
+                         col_names = FALSE)
+sideways.data
+```
+
+
+
+We can flip the table using the transpose function t().
+
+
+```{r}
+rightways.data <- t(sideways.data)
+
+class(rightways.data) # after tranposing it is a matrix and not a dataframe
+```
+
+```{r, include=FALSE}
+rightways.data
+```
+
+
+
+We need to assign variable names. Lets assign the first row that contains the variable names to an object.
+
+```{r}
+my_names <- rightways.data[1, ]
+
+```
+
+
+Now we want to remove this row because we do not want variable names in the values of our variables. Then, we want to turn our matrix back into a data frame with the as_tibble() function (the argument .name_repair = "minimal" just tells it we know there are no names and that is okay). Lastly, we can assign our variable names with the set_names() function.
+
+```{r}
+rightways.data<-
+  rightways.data[-1, ] %>%
+  #turn into a tibble
+  as_tibble(.name_repair = "minimal") %>% 
+  #set variable names
+  set_names(my_names)
+
+```
+
+```{r, include=FALSE}
+rightways.data
+```
+
+
+
+It's still not right!  The gop and dem are character and not numeric! Lets fix this and save over the data frame. You can change a variable's class to numeric with the as.numeric() function.
+
+```{r}
+rightways.data <- rightways.data %>% 
+  mutate(gop = as.numeric(gop),
+         dem = as.numeric(dem)) 
+
+```
+
+
+Its ready!
+```{r, include=FALSE}
+rightways.data
+
+```
+
+# Practice 2
+
+Start with the county.csv file and make it a usable tibble in r
+
+1. First read it in (be careful not to read the first row as variable names) and save it as an r object.
+
+2. Is it facing the right way? If not, fix it.
+
+3. Make sure your variables have names, and remove any inappropriate rows.
+
+4. Convert to a tibble
+
+5. Are all of the variables the right class? If not, fix them.
+
+
+
+# pivot_longer
+
+
+You might come across a data set where each row does not represent the unit of observation. In the case of the country_wide data set, we have temperature data from 3 countries in 3 different years. The unit of observation should be country-year. Instead, the temperature for each year is a separate column. It cannot be used as it is, so we need to fix it.
+
+```{r, include=FALSE}
+country_wide <- read_csv(here("data", "country_wide.csv"))
+
+country_wide
+```
+
+
+
+What we want is temp in one variable and year in one variable.
+
+```{r}
+
+country_long <- country_wide %>% 
+  pivot_longer(c(avgtemp.1994, avgtemp.1995, avgtemp.1996), names_to = "year", values_to = "avgtemp")
+```
+
+
+Our year variable should not contain text.
+
+```{r, include=FALSE}
+country_long
+```
+
+
+
+str_replace() will take out the extra text in our year variable. The function str_replace() takes the following arguments, a variable, the pattern you want to replace, what you want to replace the pattern with. Now we can change the variable's class to numeric, so we can do math with it
+
+```{r}
+country_long <- country_long %>% 
+  #remove average temp and replace with nothing
+  mutate(year = str_replace(year, pattern = "avgtemp.", replace = "")) %>% 
+  #make year numeric
+  mutate(year = as.numeric(year))
+
+```
+
+
+```{r, include=FALSE}
+country_long
+
+```
+
+
+# Practice 3
+
+Take messy_wide.csv and make it in long form. This is a data set where each row is a poll in 1 of 4 counties.
+Each county was polled both before and after the vote.
+
+
+1. Read in messy wide.csv to an r object
+
+2. Convert it from wide format to long format using pivot_long
+
+
+
+
