@@ -1,0 +1,75 @@
+---
+title: "Final Dataset"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(here)
+library(janitor)
+library(broom)
+library(dplyr)
+```
+```{r}
+happiness_data_raw <- read_csv(here("data", "happiness_data.csv"))
+```
+```{r}
+gdp_raw <- read_csv(here("data", "gdp_world_data.csv"), skip = 3)
+```
+```{r}
+gdp_raw
+```
+```{r}
+gdp <- gdp_raw %>%
+  pivot_longer(cols = "2005":"2019",
+               names_to = "year", values_to = "GDP") %>%
+  select(-c("1960":"2004"))%>%
+  select(-c("Country Code":"X65")) %>%
+  rename("Country" = "Country Name", 
+         "Year" = "year") %>%
+  filter(Year != 2019) %>%
+  mutate(Year = as.numeric(Year))
+gdp
+```
+
+
+
+
+
+
+
+```{r}
+happiness_data_raw
+```
+```{r}
+happiness <- happiness_data_raw %>%
+  select(-c("Code")) %>%
+  rename("Country" = "Entity",
+         "Happiness Scale" = "World Happiness Report 2016 (Cantril Ladder (0=worst; 10=best))")
+happiness
+```
+```{r}
+setdiff(gdp$Country, happiness$Country)
+```
+```{r}
+setdiff(happiness$Country, gdp$Country)
+```
+```{r}
+setdiff(gdp$Year, happiness$Year)
+```
+```{r}
+setdiff(happiness$Year, gdp$Year)
+```
+
+
+
+
+
+
+
+
+
