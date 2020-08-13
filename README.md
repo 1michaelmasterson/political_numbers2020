@@ -5,7 +5,7 @@
 The R markdown files assume that you have R and Rstudio installed. They also assume that you are working within the Rproject that this repository contains. 
 
 # Explaination
-This repository contains the newer version of my Political Numbers Section scripts for teaching R. The section_scripts folder contains the R markdown file for each section of the course as well as examples of what the compiled HTML and PDF documents should look like. The data folder contains the data used in the form of csv files. The figures folder is an empty directory (save 1 example figure) that will be used to save plots.
+This repository contains the newer version of my Political Numbers Section files for teaching R. The section_scripts folder contains the R markdown file for each section of the course as well as examples of what the compiled HTML and PDF documents should look like. The data folder contains the data used in the form of csv files. The figures folder is an empty directory (save 1 example figure) that will be used to save plots.
 
 # R Markdown Table of Contents
 
